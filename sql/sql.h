@@ -41,11 +41,127 @@ struct fds {
 	}
 };
 
+template<class F>
+class field_info
+{
+public:
+	static const char* fld_name;
+private:
+	F *fld_ptr = nullptr;
+public:
+	template<class T>
+	field_info(T *obj, F *ptr,const char* name, std::initializer_list<char> flag) {
+		fld_name = name;
+		//obj->___add_field(ref, vs, vi, name, flag);
+	};
+
+	void get_field_value(sql::ResultSet *res, size_t index) {
+		get_feild_value(*fld_ptr, res, index);
+	}
+
+	void get_feild_value_str(string& str) {
+		get_feild_value_str(*fld_ptr, str);
+	}
+
+	int64_t get_feild_value_i64() {
+		get_feild_value_i64(*fld_ptr);
+	}
+private:
+	static void get_feild_value(int32_t &val, sql::ResultSet *res, size_t index) {
+		val = res->getInt((uint32_t)index);
+	}
+
+	static void get_feild_value(int64_t &val, sql::ResultSet *res, size_t index) {
+		val = res->getInt64((uint32_t)index);
+	}
+
+	static void get_feild_value(uint32_t &val, sql::ResultSet *res, size_t index) {
+		val = res->getUInt((uint32_t)index);
+	}
+
+	static void get_feild_value(uint64_t &val, sql::ResultSet *res, size_t index) {
+		val = res->getUInt64((uint32_t)index);
+	}
+
+	static void get_feild_value(bool &val, sql::ResultSet *res, size_t index) {
+		val = res->getBoolean((uint32_t)index);
+	}
+
+	static void get_feild_value(string &val, sql::ResultSet *res, size_t index) {
+		val.append(res->getString((uint32_t)index).c_str());
+	}
+
+	static void get_feild_value(double &val, sql::ResultSet *res, size_t index) {
+		val = res->getDouble((uint32_t)index);
+	}
+
+	static void get_feild_value(float &val, sql::ResultSet *res, size_t index) {
+		val = res->getDouble((uint32_t)index);
+	}
+protected:
+	static void get_feild_value_str(int32_t &val, string& str) {
+		str = to_string(val);
+	}
+
+	static void get_feild_value_str(int64_t &val, string& str) {
+		str = to_string(val);
+	}
+
+	static void get_feild_value_str(uint32_t &val, string& str) {
+		str = to_string(val);
+	}
+
+	static void get_feild_value_str(uint64_t &val, string& str) {
+		str = to_string(val);
+	}
+
+	static void get_feild_value_str(bool &val, string& str) {
+		str = to_string(val);
+	}
+
+	static void get_feild_value_str(string &val, string& str) {
+		str = "'";
+		str += val;
+		str += "'";
+	}
+
+	static void get_feild_value_str(double &val, string& str) {
+		str = to_string(val);
+	}
+
+	static void get_feild_value_str(float &val, string& str) {
+		str = to_string(val);
+	}
+protected:
+	static int64_t get_feild_value_i64(int32_t &val) {
+		return val;
+	}
+
+	static int64_t get_feild_value_i64(int64_t &val) {
+		return val;
+	}
+
+	static int64_t get_feild_value_i64(uint32_t &val) {
+		return val;
+	}
+
+	static int64_t get_feild_value_i64(uint64_t &val) {
+		return val;
+	}
+
+	template<class T>
+	static int64_t get_feild_value_i64(T &val) {
+		return 0;
+	}
+};
+template<class F>
+const char* field_info<F>::fld_name;
+
 class colloect
 {
 public:
-	template<class T,class Ref=typename fds<T>::ref_type, class Vs = typename fds<T>::vs_type, class Vi = typename fds<T>::vi_type>
-	colloect(T *obj,Ref ref, Vs vs,Vi vi, const char* name, std::initializer_list<char> flag) {
+	template<class T, class Ref = typename fds<T>::ref_type, class Vs = typename fds<T>::vs_type, class Vi = typename fds<T>::vi_type>
+	colloect(T *obj, Ref ref, Vs vs, Vi vi, const char* name, std::initializer_list<char> flag) {
 		obj->___add_field(ref, vs, vi, name, flag);
 	};
 };
@@ -78,7 +194,8 @@ public:\
 		return get_feild_value_i64(name);\
 	}\
 private:\
-	colloect collect_##name{this,&___table_type::___ref_##name,&___table_type::___get_##name##_value_str,&___table_type::___get_##name##_value_i64,#name,{__VA_ARGS__}};
+	colloect collect_##name{this,&___table_type::___ref_##name,&___table_type::___get_##name##_value_str,&___table_type::___get_##name##_value_i64,#name,{__VA_ARGS__}};\
+	field_info<type> ____##name{this,&name,#name,{__VA_ARGS__}};
 
 class __db_struct_base {
 public:
@@ -222,6 +339,14 @@ protected:
 	static void get_feild_value(string &val, sql::ResultSet *res, size_t index) {
 		val.append(res->getString((uint32_t)index).c_str());
 	}
+
+	static void get_feild_value(double &val, sql::ResultSet *res, size_t index) {
+		val = res->getDouble((uint32_t)index);
+	}
+
+	static void get_feild_value(float &val, sql::ResultSet *res, size_t index) {
+		val = res->getDouble((uint32_t)index);
+	}
 protected:
 	static void get_feild_value_str(int32_t &val,string& str) {
 		str = to_string(val);
@@ -249,6 +374,13 @@ protected:
 		str += "'";
 	}
 
+	static void get_feild_value_str(double &val, string& str) {
+		str = to_string(val);
+	}
+
+	static void get_feild_value_str(float &val, string& str) {
+		str = to_string(val);
+	}
 protected:
 	static int64_t get_feild_value_i64(int32_t &val) {
 		return val;
