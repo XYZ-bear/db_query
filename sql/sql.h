@@ -24,11 +24,10 @@ using namespace std;
 #define primary_key 0x1
 #define auto_increment 0x2
 
-template<class T>
 struct fds {
-	typedef void(T::*ref_type)(sql::ResultSet *res, size_t index);
-	typedef void(T::*vs_type)(string &str);
-	typedef int64_t(T::*vi_type)();
+	typedef function<void(sql::ResultSet *res, size_t index)> ref_type;
+	typedef function<void(string &str)> vs_type;
+	typedef function <int64_t()> vi_type;
 	ref_type ref;
 	vs_type vs;
 	vi_type vi;
@@ -41,18 +40,33 @@ struct fds {
 	}
 };
 
+struct tbl_fld_link {
+	const char* tbl;
+	const char* fld;
+};
+
 template<class F>
-class field_info
+class field_operator
 {
-public:
-	static const char* fld_name;
 private:
 	F *fld_ptr = nullptr;
 public:
 	template<class T>
-	field_info(T *obj, F *ptr,const char* name, std::initializer_list<char> flag) {
-		fld_name = name;
-		//obj->___add_field(ref, vs, vi, name, flag);
+	field_operator(T *obj, F *ptr, const char* name, const std::initializer_list<char> &flag) {
+		auto &f = obj->___get_field(name);
+		f.ref = [this](sql::ResultSet *res, size_t index) {
+
+			this->get_field_value(res, index);
+		};
+		f.vs = [this](string& str) {
+			this->get_feild_value_str(str);
+		};
+		f.vi = [this]()-> int64_t {
+			return this->get_feild_value_i64();
+		};
+		for (auto fl : flag) {
+			f.set_flag(fl);
+		}
 	};
 
 	void get_field_value(sql::ResultSet *res, size_t index) {
@@ -64,7 +78,7 @@ public:
 	}
 
 	int64_t get_feild_value_i64() {
-		get_feild_value_i64(*fld_ptr);
+		return get_feild_value_i64(*fld_ptr);
 	}
 private:
 	static void get_feild_value(int32_t &val, sql::ResultSet *res, size_t index) {
@@ -154,17 +168,6 @@ protected:
 		return 0;
 	}
 };
-template<class F>
-const char* field_info<F>::fld_name;
-
-class colloect
-{
-public:
-	template<class T, class Ref = typename fds<T>::ref_type, class Vs = typename fds<T>::vs_type, class Vi = typename fds<T>::vi_type>
-	colloect(T *obj, Ref ref, Vs vs, Vi vi, const char* name, std::initializer_list<char> flag) {
-		obj->___add_field(ref, vs, vi, name, flag);
-	};
-};
 
 
 #define table(name)\
@@ -174,28 +177,9 @@ class name :public __db_struct<name,name_##name>
 #define sql_field(type,name,...) \
 public:\
 	type name;\
-    static constexpr const char* __##name= #name;\
-	static string& _##name(){\
-		static string n;\
-		if(n.size()==0){\
-			n += _table_name;\
-			n+='.';\
-			n+=(#name);\
-		}\
-		return n;\
-	}\
-	void ___ref_##name(sql::ResultSet *res, size_t index){\
-		get_feild_value(name,res,index);\
-	}\
-	void ___get_##name##_value_str(string &str){\
-		get_feild_value_str(name,str);\
-	}\
-	int64_t ___get_##name##_value_i64(){\
-		return get_feild_value_i64(name);\
-	}\
+    static constexpr tbl_fld_link _##name= {_table_name,#name};\
 private:\
-	colloect collect_##name{this,&___table_type::___ref_##name,&___table_type::___get_##name##_value_str,&___table_type::___get_##name##_value_i64,#name,{__VA_ARGS__}};\
-	field_info<type> ____##name{this,&name,#name,{__VA_ARGS__}};
+	field_operator<type> operator_##name{this,&name,#name,{__VA_ARGS__}};
 
 class __db_struct_base {
 public:
@@ -207,14 +191,11 @@ class __db_struct:public __db_struct_base {
 public:
 	typedef T ___table_type;
 	static constexpr const char* _table_name = nae;
-private:
-	static bool inid;
 public:
 	__db_struct() {
 		_tbn = _table_name;
 	}
 	~__db_struct() {
-		inid = true;
 	}
 	bool unpack(sql::ResultSet *res) {
 		if (res) {
@@ -233,7 +214,7 @@ public:
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
 					auto iter = fields_.find(res->getMetaData()->getColumnName(i).c_str());
 					if (iter != fields_.end()) {
-						(((T*)this)->*(iter->second.ref))(res, i);
+						iter->second.ref(res, i);
 						if (iter->second.check_flag(primary_key)) {
 							key = (((T*)this)->*(iter->second.vi))();
 						}
@@ -250,9 +231,9 @@ public:
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
 					auto iter = fields_.find(res->getMetaData()->getColumnName(i).c_str());
 					if (iter != fields_.end()) {
-						(((T*)this)->*(iter->second.ref))(res, i);
+						iter->second.ref(res, i);
 						if (iter->second.check_flag(primary_key)) {
-							(((T*)this)->*(iter->second.vs))(key);
+							iter->second.vs(key);
 						}
 					}
 				}
@@ -261,21 +242,13 @@ public:
 		}
 		return false;
 	}
-	void ___add_field(typename fds<T>::ref_type ref, typename fds<T>::vs_type vs, typename fds<T>::vi_type vi, const char *name, std::initializer_list<char> &flag) {
-		if (!inid) {
-			auto &f = fields_[name];
-			f.ref = ref;
-			f.vs = vs;
-			f.vi = vi;
-			for (auto fl : flag) {
-				f.set_flag(fl);
-			}
-		}
+	fds& ___get_field(string s) {
+		return fields_[s];;
 	}
 	bool ___do_ref(const char* ele, sql::ResultSet *res, size_t index) {
 		auto iter = fields_.find(ele);  //仅find操作不需要加锁 https://www.zhihu.com/question/265714624
 		if (iter != fields_.end()) {
-			(((T*)this)->*(iter->second.ref))(res, index);
+			iter->second.ref(res, index);
 			return true;
 		}
 		return false;
@@ -286,7 +259,7 @@ public:
 			if (!field.second.check_flag(auto_increment)) {
 				set += field.first;
 				set += '=';
-				(((T*)this)->*(field.second.vs))(v_str);
+				field.vs(v_str);
 				set += v_str;
 				set += ',';
 			}
@@ -306,7 +279,7 @@ public:
 		set += ") values(";
 		for (auto &field : fields_) {
 			if (!field.second.check_flag(auto_increment)) {
-				(((T*)this)->*(field.second.vs))(v_str);
+				field.vs(v_str);
 				set += v_str;
 				set += ',';
 			}
@@ -315,7 +288,7 @@ public:
 		set += ")";
 	}
 protected:
-	static map<string, fds<T>> fields_;
+	map<string, fds> fields_;
 	static void get_feild_value(int32_t &val, sql::ResultSet *res, size_t index) {
 		val = res->getInt((uint32_t)index);
 	}
@@ -403,11 +376,6 @@ protected:
 		return 0;
 	}
 };
-template<class T, const char* nae>
-map<string, fds<T>> __db_struct<T, nae>::fields_;
-
-template<class T, const char* nae>
-bool __db_struct<T, nae>::inid = false;
 
 ///-------------------------somthing about sql query------------------
 
@@ -613,9 +581,10 @@ private:
 		cpy(",", 1);
 	}
 
-	void appand(string&(*func)()) {
-		string &val = func();
-		cpy(val.c_str(), (int)val.length());
+	void appand(tbl_fld_link &link) {
+		cpy(link.tbl, (int)strlen(link.tbl));
+		cpy(".", 1);
+		cpy(link.fld, (int)strlen(link.fld));
 		cpy(",", 1);
 	}
 	template<class ELEMENT, class ...ELEMENTS>
@@ -726,18 +695,20 @@ public:
 		return *this;
 	}
 
-	sql_query &equal(string&(*func)(), int val) {
-		string &key = func();
-		cpy(key.c_str(), (int)key.length());
+	sql_query &equal(const tbl_fld_link &link, int val) {
+		cpy(link.tbl, (int)strlen(link.tbl));
+		cpy(".", 1);
+		cpy(link.fld, (int)strlen(link.fld));
 		cpy("=", 1);
 		itoa(val, pos, 10);
 		pos += strlen(pos);
 		return *this;
 	}
 
-	sql_query &equal(string&(*func)(), const char* val) {
-		string &key = func();
-		cpy(key.c_str(), (int)key.length());
+	sql_query &equal(const tbl_fld_link &link, const char* val) {
+		cpy(link.tbl, (int)strlen(link.tbl));
+		cpy(".", 1);
+		cpy(link.fld, (int)strlen(link.fld));
 		cpy("='", 2);
 		cpy(val, (int)strlen(val));
 		cpy("'", 1);
@@ -767,16 +738,18 @@ public:
 		pos += strlen(pos);
 		return *this;
 	}
-	sql_query &not_equal(string&(*func)(), const char* val) {
-		string &key = func();
-		cpy(key.c_str(), (int)key.length());
+	sql_query &not_equal(const tbl_fld_link &link, const char* val) {
+		cpy(link.tbl, (int)strlen(link.tbl));
+		cpy(".", 1);
+		cpy(link.fld, (int)strlen(link.fld));
 		cpy("!=", 1);
 		cpy(val, (int)strlen(val));
 		return *this;
 	}
-	sql_query &not_equal(string&(*func)(), int val) {
-		string &key = func();
-		cpy(key.c_str(), (int)key.length());
+	sql_query &not_equal(const tbl_fld_link &link, int val) {
+		cpy(link.tbl, (int)strlen(link.tbl));
+		cpy(".", 1);
+		cpy(link.fld, (int)strlen(link.fld));
 		cpy("!=", 2);
 		itoa(val, pos, 10);
 		pos += strlen(pos);
