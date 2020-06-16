@@ -17,6 +17,7 @@
 #include <cppconn/exception.h>
 #include <cppconn/resultset.h>
 #include <cppconn/statement.h>
+#include <cppconn/prepared_statement.h>
 
 using namespace std;
 
@@ -28,9 +29,11 @@ struct fds {
 	typedef function<void(sql::ResultSet *res, size_t index)> ref_type;
 	typedef function<void(string &str)> vs_type;
 	typedef function <int64_t()> vi_type;
+	typedef function <void(sql::PreparedStatement *ps, size_t index)> pv_type;
 	ref_type ref;
 	vs_type vs;
 	vi_type vi;
+	pv_type pv;
 	char flag;
 	void set_flag(char f) {
 		flag = flag | f;
@@ -45,17 +48,18 @@ struct tbl_fld_link {
 	const char* fld;
 };
 
-template<class F>
+template<class T>
+class __db_struct_base;
+
+template<class T, class F>
 class field_operator
 {
 private:
 	F *fld_ptr = nullptr;
 public:
-	template<class T>
 	field_operator(T *obj, F *ptr, const char* name, const std::initializer_list<char> &flag) {
 		auto &f = obj->___get_field(name);
 		f.ref = [this](sql::ResultSet *res, size_t index) {
-
 			this->get_field_value(res, index);
 		};
 		f.vs = [this](string& str) {
@@ -80,7 +84,12 @@ public:
 	int64_t get_feild_value_i64() {
 		return get_feild_value_i64(*fld_ptr);
 	}
-private:
+
+	int64_t prepare_value(sql::PreparedStatement *ps, size_t index) {
+		return prepare_set(*fld_ptr, ps, index);
+	}
+
+protected:
 	static void get_feild_value(int32_t &val, sql::ResultSet *res, size_t index) {
 		val = res->getInt((uint32_t)index);
 	}
@@ -110,7 +119,7 @@ private:
 	}
 
 	static void get_feild_value(float &val, sql::ResultSet *res, size_t index) {
-		val = res->getDouble((uint32_t)index);
+		val = (float)res->getDouble((uint32_t)index);
 	}
 protected:
 	static void get_feild_value_str(int32_t &val, string& str) {
@@ -167,39 +176,70 @@ protected:
 	static int64_t get_feild_value_i64(T &val) {
 		return 0;
 	}
+public:
+	static void prepare_set(int32_t &val, sql::PreparedStatement *ps, size_t index) {
+		ps->setInt((uint32_t)index, val);
+	}
+
+	static void prepare_set(int64_t &val, sql::PreparedStatement *ps, size_t index) {
+		ps->setInt64((uint32_t)index, val);
+	}
+
+	static void prepare_set(uint32_t &val, sql::PreparedStatement *ps, size_t index) {
+		ps->setUInt((uint32_t)index, val);
+	}
+
+	static void prepare_set(uint64_t &val, sql::PreparedStatement *ps, size_t index) {
+		ps->setUInt64((uint32_t)index, val);
+	}
+
+	static void prepare_set(bool &val, sql::PreparedStatement *ps, size_t index) {
+		ps->setBoolean((uint32_t)index, val);
+	}
+
+	static void prepare_set(string &val, sql::PreparedStatement *ps, size_t index) {
+		ps->setString((uint32_t)index, val.c_str());
+	}
+
+	static void prepare_set(double &val, sql::PreparedStatement *ps, size_t index) {
+		ps->setDouble((uint32_t)index, val);
+	}
+
+	static void prepare_set(float &val, sql::PreparedStatement *ps, size_t index) {
+		ps->setDouble((uint32_t)index, val);
+	}
+
+	static void prepare_set(__db_struct_base<T> &val, sql::PreparedStatement *ps, size_t index) {
+		val.prepare_value(ps, index);
+	}
 };
 
 
 #define table(name)\
 extern const char name_##name[]=#name;\
-class name :public __db_struct<name,name_##name>
+class name :public __db_struct_name<name,name_##name>
 
 #define sql_field(type,name,...) \
 public:\
 	type name;\
     static constexpr tbl_fld_link _##name= {_table_name,#name};\
 private:\
-	field_operator<type> operator_##name{this,&name,#name,{__VA_ARGS__}};
+	field_operator<___table_type,type> operator_##name{this,&name,#name,{__VA_ARGS__}};
 
+template<class T>
 class __db_struct_base {
 public:
-	const char* _tbn;
-};
-
-template<class T, const char* nae>
-class __db_struct:public __db_struct_base {
-public:
 	typedef T ___table_type;
-	static constexpr const char* _table_name = nae;
+	const char* _tbn;
 public:
-	__db_struct() {
-		_tbn = _table_name;
+	__db_struct_base() {
+		//_tbn = _table_name;
 	}
-	~__db_struct() {
+	~__db_struct_base() {
 	}
 	bool unpack(sql::ResultSet *res) {
 		if (res) {
-			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_table_name) == 0) {
+			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_tbn) == 0) {
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
 					this->___do_ref(res->getMetaData()->getColumnName(i).c_str(), res, i);
 				}
@@ -208,9 +248,9 @@ public:
 		}
 		return false;
 	}
-	bool unpack(sql::ResultSet *res,int64_t &key) {
+	bool unpack(sql::ResultSet *res, int64_t &key) {
 		if (res) {
-			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_table_name) == 0) {
+			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_tbn) == 0) {
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
 					auto iter = fields_.find(res->getMetaData()->getColumnName(i).c_str());
 					if (iter != fields_.end()) {
@@ -227,7 +267,7 @@ public:
 	}
 	bool unpack(sql::ResultSet *res, string &key) {
 		if (res) {
-			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_table_name) == 0) {
+			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_tbn) == 0) {
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
 					auto iter = fields_.find(res->getMetaData()->getColumnName(i).c_str());
 					if (iter != fields_.end()) {
@@ -246,7 +286,7 @@ public:
 		return fields_[s];;
 	}
 	bool ___do_ref(const char* ele, sql::ResultSet *res, size_t index) {
-		auto iter = fields_.find(ele);  //仅find操作不需要加锁 https://www.zhihu.com/question/265714624
+		auto iter = fields_.find(ele);
 		if (iter != fields_.end()) {
 			iter->second.ref(res, index);
 			return true;
@@ -287,93 +327,43 @@ public:
 		set.pop_back();
 		set += ")";
 	}
+	void ___get_prepare_str(string& set) {
+		string v_str;
+		set += "(";
+		for (auto &field : fields_) {
+			if (!field.second.check_flag(auto_increment)) {
+				set += field.first;
+				set += ',';
+			}
+		}
+		set.pop_back();
+		set += ") values(";
+		for (auto &field : fields_) {
+			if (!field.second.check_flag(auto_increment)) {
+				field.vs(v_str);
+				set += '?,';
+			}
+		}
+		set.pop_back();
+		set += ")";
+	}
+	void prepare_value(sql::PreparedStatement *ps, size_t index) {
+		for (auto &field : fields_) {
+			if (!field.second.check_flag(auto_increment)) {
+				field.second.pv(ps, index++);
+			}
+		}
+	}
 protected:
 	map<string, fds> fields_;
-	static void get_feild_value(int32_t &val, sql::ResultSet *res, size_t index) {
-		val = res->getInt((uint32_t)index);
-	}
+};
 
-	static void get_feild_value(int64_t &val, sql::ResultSet *res, size_t index) {
-		val = res->getInt64((uint32_t)index);
-	}
-
-	static void get_feild_value(uint32_t &val, sql::ResultSet *res, size_t index) {
-		val = res->getUInt((uint32_t)index);
-	}
-
-	static void get_feild_value(uint64_t &val, sql::ResultSet *res, size_t index) {
-		val = res->getUInt64((uint32_t)index);
-	}
-
-	static void get_feild_value(bool &val, sql::ResultSet *res, size_t index) {
-		val = res->getBoolean((uint32_t)index);
-	}
-
-	static void get_feild_value(string &val, sql::ResultSet *res, size_t index) {
-		val.append(res->getString((uint32_t)index).c_str());
-	}
-
-	static void get_feild_value(double &val, sql::ResultSet *res, size_t index) {
-		val = res->getDouble((uint32_t)index);
-	}
-
-	static void get_feild_value(float &val, sql::ResultSet *res, size_t index) {
-		val = res->getDouble((uint32_t)index);
-	}
-protected:
-	static void get_feild_value_str(int32_t &val,string& str) {
-		str = to_string(val);
-	}
-
-	static void get_feild_value_str(int64_t &val, string& str) {
-		str = to_string(val);
-	}
-
-	static void get_feild_value_str(uint32_t &val, string& str) {
-		str = to_string(val);
-	}
-
-	static void get_feild_value_str(uint64_t &val, string& str) {
-		str = to_string(val);
-	}
-
-	static void get_feild_value_str(bool &val, string& str) {
-		str = to_string(val);
-	}
-
-	static void get_feild_value_str(string &val, string& str) {
-		str = "'";
-		str += val;
-		str += "'";
-	}
-
-	static void get_feild_value_str(double &val, string& str) {
-		str = to_string(val);
-	}
-
-	static void get_feild_value_str(float &val, string& str) {
-		str = to_string(val);
-	}
-protected:
-	static int64_t get_feild_value_i64(int32_t &val) {
-		return val;
-	}
-
-	static int64_t get_feild_value_i64(int64_t &val) {
-		return val;
-	}
-
-	static int64_t get_feild_value_i64(uint32_t &val) {
-		return val;
-	}
-
-	static int64_t get_feild_value_i64(uint64_t &val) {
-		return val;
-	}
-
-	template<class T>
-	static int64_t get_feild_value_i64(T &val) {
-		return 0;
+template<class T, const char* nae>
+class __db_struct_name:public __db_struct_base<T> {
+public:
+	static constexpr const char* _table_name = nae;
+	__db_struct_name(){
+		__db_struct_base<T>::_tbn = nae;
 	}
 };
 
@@ -469,6 +459,18 @@ namespace multi_args_and_unpack {
 	};
 };
 
+namespace multi_args_and_prepare {
+	template<class ELEMENT, class ...ELEMENTS>
+	static void args(ELEMENT& ele, ELEMENTS&... eles, sql::PreparedStatement* pre, size_t index) {
+		field_operator_base::prepare_set(ele, pre, index);
+		args(eles..., ++index);
+	}
+	template<class ELEMENT>
+	static void args(ELEMENT& ele, sql::PreparedStatement* pre, size_t index) {
+		field_operator_base::prepare_set(ele, pre, index);
+	}
+};
+
 template<class ...T>
 class res_set {	
 	std::tuple<T...> eles;
@@ -497,10 +499,33 @@ class asyn_update_data :public asyn_data_base
 {
 private:
 	function<void(bool result)> func;
+
 	bool r;
 public:
 	~asyn_update_data() {}
 	asyn_update_data(const function<void(bool result)> &f, const char* s, moodycamel::ConcurrentQueue<asyn_data_base*> *queue) {
+		func = f;
+		sql = s;
+		res_queue_ = queue;
+	}
+
+	void query(sql::Statement *stmt) {
+		r = stmt->executeUpdate(sql.c_str());
+	}
+	void result() {
+		func(r);
+	}
+};
+
+template<class V,class F, class P = detail::__function_traits<std::decay_t<F>>>
+class asyn_prepare_data :public asyn_data_base
+{
+private:
+	function<void(bool result)> func;
+	bool r;
+public:
+	~asyn_prepare_data() {}
+	asyn_prepare_data(const function<void(bool result)> &f, const char* s, moodycamel::ConcurrentQueue<asyn_data_base*> *queue) {
 		func = f;
 		sql = s;
 		res_queue_ = queue;
@@ -877,6 +902,21 @@ public:
 			func(r1, r2);
 			reset();
 		}
+	}
+
+	template<class ...ELEMENTS>
+	sql_query &prepare_values(ELEMENTS... eles) {
+		if (auto *prepare = con->prepareStatement(end())) {
+			multi_args_and_prepare::args(eles..., prepare, 0);
+		}
+		
+		//auto *prepare = con->prepareStatement(end());
+		//prepare->set
+		//cpy(" values(", 8);
+		//args(eles...);
+		//pos -= 1;
+		//cpy(")", 1);
+		return *this;
 	}
 
 	bool on_update() {
