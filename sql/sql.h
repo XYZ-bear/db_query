@@ -461,13 +461,13 @@ namespace multi_args_and_unpack {
 
 namespace multi_args_and_prepare {
 	template<class ELEMENT, class ...ELEMENTS>
-	static void args(ELEMENT& ele, ELEMENTS&... eles, sql::PreparedStatement* pre, size_t index) {
-		field_operator_base::prepare_set(ele, pre, index);
+	static void args(sql::PreparedStatement* pre, size_t index, ELEMENT& ele, ELEMENTS&... eles) {
+		field_operator<ELEMENT, ELEMENT>::prepare_set(ele, pre, index);
 		args(eles..., ++index);
 	}
 	template<class ELEMENT>
-	static void args(ELEMENT& ele, sql::PreparedStatement* pre, size_t index) {
-		field_operator_base::prepare_set(ele, pre, index);
+	static void args(sql::PreparedStatement* pre, size_t index, ELEMENT& ele) {
+		field_operator<ELEMENT, ELEMENT>::prepare_set(ele, pre, index);
 	}
 };
 
@@ -907,7 +907,7 @@ public:
 	template<class ...ELEMENTS>
 	sql_query &prepare_values(ELEMENTS... eles) {
 		if (auto *prepare = con->prepareStatement(end())) {
-			multi_args_and_prepare::args(eles..., prepare, 0);
+			multi_args_and_prepare::args(prepare, 0, eles...);
 		}
 		
 		//auto *prepare = con->prepareStatement(end());
