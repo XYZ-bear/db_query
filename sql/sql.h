@@ -51,44 +51,28 @@ struct tbl_fld_link {
 template<class T>
 class __db_struct_base;
 
-template<class T, class F>
 class field_operator
 {
-private:
-	F *fld_ptr = nullptr;
 public:
+	template<class T, class F>
 	field_operator(T *obj, F *ptr, const char* name, const std::initializer_list<char> &flag) {
 		auto &f = obj->___get_field(name);
-		f.ref = [this](sql::ResultSet *res, size_t index) {
-			this->get_field_value(res, index);
+		f.ref = [ptr](sql::ResultSet *res, size_t index) {
+			get_feild_value(*ptr, res, index);
 		};
-		f.vs = [this](string& str) {
-			this->get_feild_value_str(str);
+		f.vs = [ptr](string& str) {
+			get_feild_value_str(*ptr, str);
 		};
-		f.vi = [this]()-> int64_t {
-			return this->get_feild_value_i64();
+		f.vi = [ptr]()-> int64_t {
+			return get_feild_value_i64(*ptr);
+		};
+		f.pv = [ptr](sql::PreparedStatement *ps, size_t index)-> void {
+			prepare_set(*ptr, ps, index);
 		};
 		for (auto fl : flag) {
 			f.set_flag(fl);
 		}
 	};
-
-	void get_field_value(sql::ResultSet *res, size_t index) {
-		get_feild_value(*fld_ptr, res, index);
-	}
-
-	void get_feild_value_str(string& str) {
-		get_feild_value_str(*fld_ptr, str);
-	}
-
-	int64_t get_feild_value_i64() {
-		return get_feild_value_i64(*fld_ptr);
-	}
-
-	int64_t prepare_value(sql::PreparedStatement *ps, size_t index) {
-		return prepare_set(*fld_ptr, ps, index);
-	}
-
 protected:
 	static void get_feild_value(int32_t &val, sql::ResultSet *res, size_t index) {
 		val = res->getInt((uint32_t)index);
@@ -209,6 +193,7 @@ public:
 		ps->setDouble((uint32_t)index, val);
 	}
 
+	template<class T>
 	static void prepare_set(__db_struct_base<T> &val, sql::PreparedStatement *ps, size_t index) {
 		val.prepare_value(ps, index);
 	}
@@ -224,7 +209,7 @@ public:\
 	type name;\
     static constexpr tbl_fld_link _##name= {_table_name,#name};\
 private:\
-	field_operator<___table_type,type> operator_##name{this,&name,#name,{__VA_ARGS__}};
+	field_operator operator_##name{this,&name,#name,{__VA_ARGS__}};
 
 template<class T>
 class __db_struct_base {
@@ -233,7 +218,6 @@ public:
 	const char* _tbn;
 public:
 	__db_struct_base() {
-		//_tbn = _table_name;
 	}
 	~__db_struct_base() {
 	}
@@ -299,7 +283,7 @@ public:
 			if (!field.second.check_flag(auto_increment)) {
 				set += field.first;
 				set += '=';
-				field.vs(v_str);
+				field.second.vs(v_str);
 				set += v_str;
 				set += ',';
 			}
@@ -319,7 +303,7 @@ public:
 		set += ") values(";
 		for (auto &field : fields_) {
 			if (!field.second.check_flag(auto_increment)) {
-				field.vs(v_str);
+				field.second.vs(v_str);
 				set += v_str;
 				set += ',';
 			}
@@ -350,8 +334,9 @@ public:
 	void prepare_value(sql::PreparedStatement *ps, size_t index) {
 		for (auto &field : fields_) {
 			if (!field.second.check_flag(auto_increment)) {
-				field.second.pv(ps, index++);
+				field.second.pv(ps, index);
 			}
+			index++;
 		}
 	}
 protected:
@@ -462,12 +447,12 @@ namespace multi_args_and_unpack {
 namespace multi_args_and_prepare {
 	template<class ELEMENT, class ...ELEMENTS>
 	static void args(sql::PreparedStatement* pre, size_t index, ELEMENT& ele, ELEMENTS&... eles) {
-		field_operator<ELEMENT, ELEMENT>::prepare_set(ele, pre, index);
+		field_operator::prepare_set(ele, pre, index);
 		args(eles..., ++index);
 	}
 	template<class ELEMENT>
 	static void args(sql::PreparedStatement* pre, size_t index, ELEMENT& ele) {
-		field_operator<ELEMENT, ELEMENT>::prepare_set(ele, pre, index);
+		field_operator::prepare_set(ele, pre, index);
 	}
 };
 
@@ -511,28 +496,33 @@ public:
 
 	void query(sql::Statement *stmt) {
 		r = stmt->executeUpdate(sql.c_str());
+		res_queue_->enqueue(this);
 	}
 	void result() {
 		func(r);
 	}
 };
 
-template<class V,class F, class P = detail::__function_traits<std::decay_t<F>>>
+//template<class V,class F, class P = detail::__function_traits<std::decay_t<F>>>
 class asyn_prepare_data :public asyn_data_base
 {
 private:
 	function<void(bool result)> func;
+	sql::PreparedStatement * prepare;
 	bool r;
 public:
 	~asyn_prepare_data() {}
-	asyn_prepare_data(const function<void(bool result)> &f, const char* s, moodycamel::ConcurrentQueue<asyn_data_base*> *queue) {
+	asyn_prepare_data(const function<void(bool result)> &f, sql::PreparedStatement *pre, moodycamel::ConcurrentQueue<asyn_data_base*> *queue) {
 		func = f;
-		sql = s;
+		prepare = pre;
 		res_queue_ = queue;
 	}
 
 	void query(sql::Statement *stmt) {
-		r = stmt->executeUpdate(sql.c_str());
+		r = prepare->executeUpdate();
+		res_queue_->enqueue(this);
+		prepare->close();
+		//delete prepare;
 	}
 	void result() {
 		func(r);
@@ -820,6 +810,7 @@ private:
 	sql::Connection *con;
 	sql::Statement *stmt;
 	moodycamel::ConcurrentQueue<asyn_data_base*> res_queue_;
+	sql::PreparedStatement *pres = nullptr;
 public:
 	bool init(const char* host, const char* name, const char* pwd, const char* schema) {
 		if (driver = get_driver_instance()) {
@@ -905,9 +896,10 @@ public:
 	}
 
 	template<class ...ELEMENTS>
-	sql_query &prepare_values(ELEMENTS... eles) {
+	sql_query &prepare_values(ELEMENTS&... eles) {
 		if (auto *prepare = con->prepareStatement(end())) {
-			multi_args_and_prepare::args(prepare, 0, eles...);
+			multi_args_and_prepare::args(prepare, 1, eles...);
+			pres = prepare;
 		}
 		
 		//auto *prepare = con->prepareStatement(end());
@@ -932,7 +924,12 @@ public:
 	}
 
 	void on_asyn_update(function<void(bool result)> func) {
-		push_query(new asyn_update_data(func, end(), &res_queue_));
+		if (pres) {
+			push_query(new asyn_prepare_data(func, pres, &res_queue_));
+			pres = nullptr;
+		}
+		else
+			push_query(new asyn_update_data(func, end(), &res_queue_));
 		reset();
 	}
 
