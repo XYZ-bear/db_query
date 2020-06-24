@@ -10,6 +10,8 @@
 #include <thread>
 #include <queue>
 #include <mutex>
+#include <type_traits>
+#include <cstring>
 #include "concurrentqueue.h"
 #include "mysql_connection.h"
 
@@ -25,24 +27,6 @@ using namespace std;
 #define primary_key 0x1
 #define auto_increment 0x2
 
-struct fds {
-	typedef function<void(sql::ResultSet *res, size_t index)> ref_type;
-	typedef function<void(string &str)> vs_type;
-	typedef function <int64_t()> vi_type;
-	typedef function <void(sql::PreparedStatement *ps, size_t index)> pv_type;
-	ref_type ref;
-	vs_type vs;
-	vi_type vi;
-	pv_type pv;
-	char flag;
-	void set_flag(char f) {
-		flag = flag | f;
-	}
-	bool check_flag(char f) {
-		return flag & f;
-	}
-};
-
 struct tbl_fld_link {
 	const char* tbl;
 	const char* fld;
@@ -51,29 +35,8 @@ struct tbl_fld_link {
 template<class T>
 class __db_struct_base;
 
-class field_operator
-{
+class field_operator {
 public:
-	template<class T, class F>
-	field_operator(T *obj, F *ptr, const char* name, const std::initializer_list<char> &flag) {
-		auto &f = obj->___get_field(name);
-		f.ref = [ptr](sql::ResultSet *res, size_t index) {
-			get_feild_value(*ptr, res, index);
-		};
-		f.vs = [ptr](string& str) {
-			get_feild_value_str(*ptr, str);
-		};
-		f.vi = [ptr]()-> int64_t {
-			return get_feild_value_i64(*ptr);
-		};
-		f.pv = [ptr](sql::PreparedStatement *ps, size_t index)-> void {
-			prepare_set(*ptr, ps, index);
-		};
-		for (auto fl : flag) {
-			f.set_flag(fl);
-		}
-	};
-protected:
 	static void get_feild_value(int32_t &val, sql::ResultSet *res, size_t index) {
 		val = res->getInt((uint32_t)index);
 	}
@@ -105,7 +68,7 @@ protected:
 	static void get_feild_value(float &val, sql::ResultSet *res, size_t index) {
 		val = (float)res->getDouble((uint32_t)index);
 	}
-protected:
+public:
 	static void get_feild_value_str(int32_t &val, string& str) {
 		str = to_string(val);
 	}
@@ -139,7 +102,7 @@ protected:
 	static void get_feild_value_str(float &val, string& str) {
 		str = to_string(val);
 	}
-protected:
+public:
 	static int64_t get_feild_value_i64(int32_t &val) {
 		return val;
 	}
@@ -199,17 +162,69 @@ public:
 	}
 };
 
+template<class T>
+struct fds {
+	typedef void(T::*ref_type)(sql::ResultSet *res, size_t index);
+	typedef void(T::*vs_type)(string &str);
+	typedef int64_t(T::*vi_type)();
+	typedef void(T::*pv_type)(sql::PreparedStatement *ps, size_t index);
+	ref_type ref;
+	vs_type vs;
+	vi_type vi;
+	pv_type pv;
+	char flag;
+	void set_flag(char f) {
+		flag = flag | f;
+	}
+	bool check_flag(char f) {
+		return flag & f;
+	}
+};
+
+class colloect
+{
+public:
+	template<class T, class Ref = typename fds<T>::ref_type, class Vs = typename fds<T>::vs_type, class Vi = typename fds<T>::vi_type, class Pv = typename fds<T>::pv_type>
+	colloect(T *obj, Ref ref, Vs vs, Vi vi, Pv pv, const char* name, std::initializer_list<char> flag) {
+		if (obj->inited == false) {
+			fds<T> field;
+			field.ref = ref;
+			field.vs = vs;
+			field.vi = vi;
+			field.pv = pv;
+			for (auto fl : flag) {
+				field.set_flag(fl);
+			}
+			obj->___add_field(field, name, flag);
+		}
+	};
+};
+
 
 #define table(name)\
 extern const char name_##name[]=#name;\
 class name :public __db_struct_name<name,name_##name>
 
+//static constexpr在当作参数传递时在c17以下的版本存在缺陷，会报undefine错误，不过在c17中得到了修复
+//https://stackoverflow.com/questions/8016780/undefined-reference-to-static-constexpr-char
 #define sql_field(type,name,...) \
 public:\
 	type name;\
     static constexpr tbl_fld_link _##name= {_table_name,#name};\
+	void ___ref_##name(sql::ResultSet *res, size_t index){\
+		field_operator::get_feild_value(name,res,index);\
+	}\
+	void ___get_##name##_value_str(string &str){\
+		field_operator::get_feild_value_str(name,str);\
+	}\
+	int64_t ___get_##name##_value_i64(){\
+		return field_operator::get_feild_value_i64(name);\
+	}\
+	void ___prepare_##name##_value(sql::PreparedStatement *ps, size_t index){\
+		field_operator::prepare_set(name,ps,index);\
+	}\
 private:\
-	field_operator operator_##name{this,&name,#name,{__VA_ARGS__}};
+	colloect collect_##name{&instance,&___table_type::___ref_##name,&___table_type::___get_##name##_value_str,&___table_type::___get_##name##_value_i64,&___table_type::___prepare_##name##_value,#name,{__VA_ARGS__}};
 
 template<class T>
 class __db_struct_base {
@@ -218,10 +233,13 @@ public:
 	const char* _tbn;
 public:
 	__db_struct_base() {
+		instance; //模板类需要显示激活
+		fields_;
 	}
 	~__db_struct_base() {
 	}
 	bool unpack(sql::ResultSet *res) {
+		auto f = res->getMetaData();
 		if (res) {
 			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_tbn) == 0) {
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
@@ -238,7 +256,7 @@ public:
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
 					auto iter = fields_.find(res->getMetaData()->getColumnName(i).c_str());
 					if (iter != fields_.end()) {
-						iter->second.ref(res, i);
+						(((T*)this)->*(iter->second.ref))(res, i);
 						if (iter->second.check_flag(primary_key)) {
 							key = (((T*)this)->*(iter->second.vi))();
 						}
@@ -255,9 +273,9 @@ public:
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
 					auto iter = fields_.find(res->getMetaData()->getColumnName(i).c_str());
 					if (iter != fields_.end()) {
-						iter->second.ref(res, i);
+						(((T*)this)->*(iter->second.ref))(res, i);
 						if (iter->second.check_flag(primary_key)) {
-							iter->second.vs(key);
+							(((T*)this)->*(iter->second.vs))(key);
 						}
 					}
 				}
@@ -266,13 +284,21 @@ public:
 		}
 		return false;
 	}
-	fds& ___get_field(string s) {
-		return fields_[s];;
-	}
+	void ___add_field(fds<___table_type> &field, const char* name, std::initializer_list<char> &flag) {
+		if (!inited) {
+			auto iter = fields_.find(name);
+			if (iter == fields_.end()) {
+				auto &f = fields_[name];
+				f = field;
+			}
+			else
+				inited = true;
+		}
+	};
 	bool ___do_ref(const char* ele, sql::ResultSet *res, size_t index) {
 		auto iter = fields_.find(ele);
 		if (iter != fields_.end()) {
-			iter->second.ref(res, index);
+			(((T*)this)->*(iter->second.ref))(res, index);
 			return true;
 		}
 		return false;
@@ -334,14 +360,23 @@ public:
 	void prepare_value(sql::PreparedStatement *ps, size_t index) {
 		for (auto &field : fields_) {
 			if (!field.second.check_flag(auto_increment)) {
-				field.second.pv(ps, index);
+				(((T*)this)->*(field.second.pv))(ps, index);
 			}
 			index++;
 		}
 	}
-protected:
-	map<string, fds> fields_;
+public:
+	static map<string, fds<___table_type>> fields_;
+	static bool inited;
+	static T instance;
 };
+template<class T>
+T __db_struct_base<T>::instance;
+template<class T>
+map<string, fds<T>> __db_struct_base<T>::fields_;
+template<class T>
+bool __db_struct_base<T>::inited = false;
+
 
 template<class T, const char* nae>
 class __db_struct_name:public __db_struct_base<T> {
@@ -529,12 +564,43 @@ public:
 	}
 };
 
-template<class F, class P = detail::__function_traits<std::decay_t<F>>>
+namespace nstuple
+{
+
+	template< size_t... _Indexes >
+	struct X_Index_tuple
+	{
+
+	};
+
+	/// Builds an X_Index_tuple< 0, 1, 2, ..., _Num - 1 >.
+	template< std::size_t _Num, typename _Tuple = X_Index_tuple<> >
+	struct X_Build_index_tuple;
+
+	template< std::size_t _Num, size_t... _Indexes >
+	struct X_Build_index_tuple<_Num, X_Index_tuple< _Indexes... > >
+		: X_Build_index_tuple< _Num - 1, X_Index_tuple< _Indexes..., sizeof...(_Indexes) > >
+	{
+
+	};
+
+	template< size_t... _Indexes >
+	struct X_Build_index_tuple< 0, X_Index_tuple< _Indexes... > >
+	{
+		typedef X_Index_tuple< _Indexes... > __type;
+	};
+
+}; // namespace nstuple
+
+template<class F, class P = detail::__function_traits<typename std::decay<F>::type>>
 class asyn_query_data3 :public asyn_data_base
 {
 private:
 	typename P::function_type func;
 	typename P::no_reference_types eles;
+
+	using X_Tuple = typename P::no_reference_types;
+	using X_Indices = typename  nstuple::X_Build_index_tuple< std::tuple_size< X_Tuple >::value >::__type;
 public:
 	~asyn_query_data3() {}
 	asyn_query_data3(const F &f, const char* s, moodycamel::ConcurrentQueue<asyn_data_base*> *queue) {
@@ -554,6 +620,7 @@ public:
 	}
 
 	void result() {
+		//_S_Invoke(X_Indices());
 		constexpr auto size = std::tuple_size<typename P::no_reference_types>::value;
 		invoke_impl(std::make_index_sequence<size>{});
 	}
@@ -562,6 +629,14 @@ public:
 	void invoke_impl(std::index_sequence<Index...>)
 	{
 		func(std::get<Index>(eles)...);
+	}
+
+	template< size_t... _Ind >
+	void _S_Invoke(nstuple::X_Index_tuple< _Ind... >)
+	{
+		// 解包 xtuple 参数，传递给 test_func() 函数调用
+		func(std::get< _Ind >(eles)...);
+		//test_func(std::get< _Ind >(std::move(xtuple))...);
 	}
 };
 
@@ -581,7 +656,7 @@ private:
 		pos += len;
 	}
 	void appand(int val) {
-		itoa(val, pos, 10);
+		sprintf(pos, "%d", val);
 		pos += strlen(pos);
 		cpy(",", 1);
 	}
@@ -715,7 +790,7 @@ public:
 		cpy(".", 1);
 		cpy(link.fld, (int)strlen(link.fld));
 		cpy("=", 1);
-		itoa(val, pos, 10);
+		sprintf(pos, "%d", val);
 		pos += strlen(pos);
 		return *this;
 	}
@@ -733,7 +808,7 @@ public:
 	sql_query &equal(const char* key, int val) {
 		cpy(key, (int)strlen(key));
 		cpy("=", 1);
-		itoa(val, pos, 10);
+		sprintf(pos, "%d", val);
 		pos += strlen(pos);
 		return *this;
 	}
@@ -749,7 +824,7 @@ public:
 	sql_query &not_equal(const char* key, int val) {
 		cpy(key, (int)strlen(key));
 		cpy("!=", 2);
-		itoa(val, pos, 10);
+		sprintf(pos, "%d", val);
 		pos += strlen(pos);
 		return *this;
 	}
@@ -766,7 +841,7 @@ public:
 		cpy(".", 1);
 		cpy(link.fld, (int)strlen(link.fld));
 		cpy("!=", 2);
-		itoa(val, pos, 10);
+		sprintf(pos, "%d", val);
 		pos += strlen(pos);
 		return *this;
 	}
