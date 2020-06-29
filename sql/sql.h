@@ -12,6 +12,7 @@
 #include <mutex>
 #include <type_traits>
 #include <cstring>
+#include <unordered_map>
 #include "concurrentqueue.h"
 #include "mysql_connection.h"
 
@@ -70,37 +71,37 @@ public:
 	}
 public:
 	static void get_feild_value_str(int32_t &val, string& str) {
-		str = to_string(val);
+		str += to_string(val);
 	}
 
 	static void get_feild_value_str(int64_t &val, string& str) {
-		str = to_string(val);
+		str += to_string(val);
 	}
 
 	static void get_feild_value_str(uint32_t &val, string& str) {
-		str = to_string(val);
+		str += to_string(val);
 	}
 
 	static void get_feild_value_str(uint64_t &val, string& str) {
-		str = to_string(val);
+		str += to_string(val);
 	}
 
 	static void get_feild_value_str(bool &val, string& str) {
-		str = to_string(val);
+		str += to_string(val);
 	}
 
 	static void get_feild_value_str(string &val, string& str) {
-		str = "'";
+		str += "'";
 		str += val;
 		str += "'";
 	}
 
 	static void get_feild_value_str(double &val, string& str) {
-		str = to_string(val);
+		str += to_string(val);
 	}
 
 	static void get_feild_value_str(float &val, string& str) {
-		str = to_string(val);
+		str += to_string(val);
 	}
 public:
 	static int64_t get_feild_value_i64(int32_t &val) {
@@ -157,8 +158,9 @@ public:
 	}
 
 	template<class T>
-	static void prepare_set(__db_struct_base<T> &val, sql::PreparedStatement *ps, size_t &index) {
-		val.prepare_value(ps, index);
+	static void prepare_set(const __db_struct_base<T> &val, sql::PreparedStatement *ps, size_t &index) {
+		__db_struct_base<T> &rv = const_cast<__db_struct_base<T>&>(val);
+		rv.prepare_value(ps, index);
 	}
 };
 
@@ -181,38 +183,58 @@ struct fds {
 	}
 };
 
-class colloect
-{
-public:
-	template<class T, class Ref = typename fds<T>::ref_type, class Vs = typename fds<T>::vs_type, class Vi = typename fds<T>::vi_type, class Pv = typename fds<T>::pv_type>
-	colloect(T *obj, Ref ref, Vs vs, Vi vi, Pv pv, const char* name, std::initializer_list<char> flag) {
-		if (obj->inited == false) {
-			fds<T> field;
-			field.ref = ref;
-			field.vs = vs;
-			field.vi = vi;
-			field.pv = pv;
-			for (auto fl : flag) {
-				field.set_flag(fl);
-			}
-			obj->___add_field(field, name, flag);
-		}
-	};
-};
-
 template<class T>
 struct tbl_fld_link2 {
-	const char* tbl;
-	const char* fld;
 	typedef void(T::*ref_type)(sql::ResultSet *res, size_t index);
 	typedef void(T::*vs_type)(string &str);
 	typedef int64_t(T::*vi_type)();
 	typedef void(T::*pv_type)(sql::PreparedStatement *ps, size_t &index);
+
+	const char* tbl;
+	const char* fld;
 	ref_type ref;
 	vs_type vs;
 	vi_type vi;
 	pv_type pv;
+	char flag;
+
+	void do_ref(T *obj, sql::ResultSet *res, size_t index) {
+		(obj->*ref)(res, index);
+	}
+
+	void do_vs(T *obj, string &str) {
+		(obj->*vs)(str);
+	}
+
+	int64_t do_vi(T *obj) {
+		return (obj->*vi)();
+	}
+
+	void do_pv(T *obj, sql::PreparedStatement *ps, size_t &index) {
+		(obj->*pv)(ps, index);
+	}
+
+	bool check_flag(char f) {
+		return flag & f;
+	}
 };
+
+class colloect
+{
+public:
+	template<class T>
+	colloect(T *obj, const tbl_fld_link2<T> *field) {
+		if (obj->inited == false) {
+			obj->___add_field(field);
+		}
+	};
+};
+
+
+template<char C1 = 0, char C2 = 0, char C3 = 0, char C4 = 0, char C5 = 0, char C6 = 0, char C7 = 0, char C8 = 0>
+constexpr char flagg() {
+	return 0 | C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8;
+}
 
 #define table(name)\
 extern const char name_##name[]=#name;\
@@ -236,9 +258,9 @@ public:\
 	void ___prepare_##name##_value(sql::PreparedStatement *ps, size_t &index){\
 		field_operator::prepare_set(name,ps,index);\
 	}\
-	static constexpr tbl_fld_link2<___table_type> _k##name= {_table_name,#name,&___table_type::___ref_##name,&___table_type::___get_##name##_value_str,&___table_type::___get_##name##_value_i64,&___table_type::___prepare_##name##_value};\
+	static constexpr tbl_fld_link2<___table_type> _k##name= {_table_name,#name,&___table_type::___ref_##name,&___table_type::___get_##name##_value_str,&___table_type::___get_##name##_value_i64,&___table_type::___prepare_##name##_value,flagg<__VA_ARGS__>()};\
 private:\
-	colloect collect_##name{&instance,&___table_type::___ref_##name,&___table_type::___get_##name##_value_str,&___table_type::___get_##name##_value_i64,&___table_type::___prepare_##name##_value,#name,{__VA_ARGS__}};
+	colloect collect_##name{&instance,&_k##name};
 
 template<class T>
 class __db_struct_base {
@@ -298,97 +320,89 @@ public:
 		}
 		return false;
 	}
-	void ___add_field(fds<___table_type> &field, const char* name, std::initializer_list<char> &flag) {
+	void ___add_field(const tbl_fld_link2<T> *field) {
 		if (!inited) {
-			auto iter = fields_.find(name);
+			auto iter = fields_.find(field->fld);
 			if (iter == fields_.end()) {
-				auto &f = fields_[name];
-				f = field;
+				auto &f = fields_[field->fld];
+				f = const_cast<tbl_fld_link2<T>*>(field);
 			}
-			else
+			else {
+				build_common_sql();
 				inited = true;
+			}
 		}
 	};
+	void build_common_sql() {
+		string space;
+		insert_str = "insert into ";
+		insert_str += _tbn;
+		insert_str += '(';
+
+		update_str = "update ";
+		update_str += _tbn;
+		update_str += " set ";
+
+		for (auto fi : fields_) {
+			if (!fi.second->check_flag(auto_increment)) {
+				insert_str += fi.first;
+				insert_str += ',';
+				space += "?,";
+
+				update_str += fi.first;
+				update_str += "=?,";
+			}
+		}
+		insert_str.pop_back();
+		insert_str += ") values(";
+		space.pop_back();
+		insert_str += space + ')';
+
+		update_str.pop_back();
+	}
 	bool ___do_ref(const char* ele, sql::ResultSet *res, size_t index) {
 		auto iter = fields_.find(ele);
 		if (iter != fields_.end()) {
-			(((T*)this)->*(iter->second.ref))(res, index);
+			iter->second->do_ref((T*)this, res, index);
 			return true;
 		}
 		return false;
 	}
-	void ___get_set_str(string& set) {
-		string v_str;
-		for (auto &field : fields_) {
-			if (!field.second.check_flag(auto_increment)) {
-				set += field.first;
-				set += '=';
-				field.second.vs(v_str);
-				set += v_str;
-				set += ',';
-			}
-		}
-		set.pop_back();
-	}
-	void ___get_value_str(string& set) {
-		string v_str;
-		set += "(";
-		for (auto &field : fields_) {
-			if (!field.second.check_flag(auto_increment)) {
-				set += field.first;
-				set += ',';
-			}
-		}
-		set.pop_back();
-		set += ") values(";
-		for (auto &field : fields_) {
-			if (!field.second.check_flag(auto_increment)) {
-				field.second.vs(v_str);
-				set += v_str;
-				set += ',';
-			}
-		}
-		set.pop_back();
-		set += ")";
-	}
-	void ___get_prepare_str(string& set) {
-		string v_str;
-		set += "(";
-		for (auto &field : fields_) {
-			if (!field.second.check_flag(auto_increment)) {
-				set += field.first;
-				set += ',';
-			}
-		}
-		set.pop_back();
-		set += ") values(";
-		for (auto &field : fields_) {
-			if (!field.second.check_flag(auto_increment)) {
-				field.vs(v_str);
-				set += '?,';
-			}
-		}
-		set.pop_back();
-		set += ")";
-	}
 	void prepare_value(sql::PreparedStatement *ps, size_t &index) {
 		for (auto &field : fields_) {
-			if (!field.second.check_flag(auto_increment)) {
-				(((T*)this)->*(field.second.pv))(ps, index);
+			if (!field.second->check_flag(auto_increment)) {
+				field.second->do_pv((T*)this, ps, index);
+			}
+		}
+	}
+	void where_key(string &str) {
+		str += " where ";
+		for (auto &field : fields_) {
+			if (field.second->check_flag(primary_key)) {
+				str += field.first;
+				str += "=";
+				field.second->do_vs((T*)this, str);
+				return;
 			}
 		}
 	}
 public:
-	static map<string, fds<___table_type>> fields_;
+	static string insert_str;
+	static string update_str;
+	static std::unordered_map<string, tbl_fld_link2<T>*> fields_;
 	static bool inited;
 	static T instance;
 };
 template<class T>
 T __db_struct_base<T>::instance;
 template<class T>
-map<string, fds<T>> __db_struct_base<T>::fields_;
+std::unordered_map<string, tbl_fld_link2<T>*> __db_struct_base<T>::fields_;
 template<class T>
 bool __db_struct_base<T>::inited = false;
+template<class T>
+string __db_struct_base<T>::insert_str;
+template<class T>
+string __db_struct_base<T>::update_str;
 
 
 template<class T, const char* nae>
@@ -467,6 +481,10 @@ namespace multi_args_and_unpack {
 
 	static bool unpack(sql::ResultSet *res, sql::ResultSet *query_set) {
 		res = query_set;
+		return false;
+	}
+
+	static bool unpack(bool res, sql::ResultSet *query_set) {
 		return false;
 	}
 
@@ -600,63 +618,39 @@ public:
 
 };
 
-namespace nstuple
-{
-
-	template< size_t... _Indexes >
-	struct X_Index_tuple
-	{
-
-	};
-
-	/// Builds an X_Index_tuple< 0, 1, 2, ..., _Num - 1 >.
-	template< std::size_t _Num, typename _Tuple = X_Index_tuple<> >
-	struct X_Build_index_tuple;
-
-	template< std::size_t _Num, size_t... _Indexes >
-	struct X_Build_index_tuple<_Num, X_Index_tuple< _Indexes... > >
-		: X_Build_index_tuple< _Num - 1, X_Index_tuple< _Indexes..., sizeof...(_Indexes) > >
-	{
-
-	};
-
-	template< size_t... _Indexes >
-	struct X_Build_index_tuple< 0, X_Index_tuple< _Indexes... > >
-	{
-		typedef X_Index_tuple< _Indexes... > __type;
-	};
-
-}; // namespace nstuple
-
 template<class F, class P = detail::__function_traits<typename std::decay<F>::type>>
 class asyn_query_data3 :public asyn_data_base
 {
 private:
 	typename P::function_type func;
 	typename P::no_reference_types eles;
-
-	using X_Tuple = typename P::no_reference_types;
-	using X_Indices = typename  nstuple::X_Build_index_tuple< std::tuple_size< X_Tuple >::value >::__type;
+	bool update_res;
 public:
 	~asyn_query_data3() {}
+public:
 	asyn_query_data3(const F &f, const char* s, moodycamel::ConcurrentQueue<asyn_data_base*> *queue) {
 		func = f;
 		sql = s;
 		res_queue_ = queue;
 	}
+
 	void query(sql::Statement *stmt) {
-		sql::ResultSet *res = stmt->executeQuery(sql.c_str());
-		while (res->next()) {
-			if (!multi_args_and_unpack::multi_args<typename P::no_reference_types>::arg(eles, res))
-				break;
+		if (std::is_same<typename P::no_reference_types, std::tuple<bool>>::value) {
+			update_res = stmt->executeUpdate(sql.c_str());
 		}
-		res->close();
-		delete res;
+		else {
+			sql::ResultSet *res = stmt->executeQuery(sql.c_str());
+			while (res->next()) {
+				if (!multi_args_and_unpack::multi_args<typename P::no_reference_types>::arg(eles, res))
+					break;
+			}
+			res->close();
+			delete res;
+		}
 		res_queue_->enqueue(this);
 	}
 
 	void result() {
-		//_S_Invoke(X_Indices());
 		constexpr auto size = std::tuple_size<typename P::no_reference_types>::value;
 		invoke_impl(std::make_index_sequence<size>{});
 	}
@@ -665,14 +659,6 @@ public:
 	void invoke_impl(std::index_sequence<Index...>)
 	{
 		func(std::get<Index>(eles)...);
-	}
-
-	template< size_t... _Ind >
-	void _S_Invoke(nstuple::X_Index_tuple< _Ind... >)
-	{
-		// 解包 xtuple 参数，传递给 test_func() 函数调用
-		func(std::get< _Ind >(eles)...);
-		//test_func(std::get< _Ind >(std::move(xtuple))...);
 	}
 };
 
@@ -748,13 +734,10 @@ public:
 	}
 	template<class T>
 	sql_query & update(T &val) {
-		cpy("update ", 7);
-		cpy(T::_table_name, (int)strlen(T::_table_name));
-		cpy(" set ", 5);
-		string str;
-		val.___get_set_str(str);
+		string &str = T::update_str;
+		val.where_key(str);
 		cpy(str.c_str(), (int)str.length());
-		return *this;
+		return values(val);
 	}
 	sql_query & insert(const char* fld) {
 		cpy("insert into ", 12);
@@ -763,21 +746,32 @@ public:
 	}
 	template<class T>
 	sql_query & insert(T &val) {
-		cpy("insert into ", 12);
-		cpy(T::_table_name, strlen(T::_table_name));
-		string str;
-		val.___get_value_str(str);
+		string &str = T::insert_str;;
 		cpy(str.c_str(), str.length());
-		return *this;
+		return values(val);
 	}
+
+	function<void(sql::PreparedStatement*)> prepare_func;
+	bool pre;
 	template<class ...ELEMENTS>
-	sql_query &values(ELEMENTS... eles) {
-		cpy(" values(", 8);
-		args(eles...);
-		pos -= 1;
-		cpy(")", 1);
+	sql_query &values(ELEMENTS&... eles) {
+		prepare_func = [eles...](sql::PreparedStatement* prepare) {
+			multi_args_and_prepare::mag mmgg;
+			mmgg.pre = prepare;
+			mmgg.args(eles...);
+		};
+		pre = true;
 		return *this;
 	}
+
+	//template<class ...ELEMENTS>
+	//sql_query &values(ELEMENTS... eles) {
+	//	cpy(" values(", 8);
+	//	args(eles...);
+	//	pos -= 1;
+	//	cpy(")", 1);
+	//	return *this;
+	//}
 	template<class ...ELEMENTS>
 	sql_query &select(ELEMENTS... eles) {
 		cpy("select ", 7);
@@ -1004,23 +998,6 @@ public:
 			func(r1, r2);
 			reset();
 		}
-	}
-	function<void(sql::PreparedStatement*)> prepare_func;
-	bool pre;
-	template<class ...ELEMENTS>
-	sql_query &prepare_values(ELEMENTS&... eles) {
-		//if (auto *prepare = con->prepareStatement(end())) {
-		//	multi_args_and_prepare::args(prepare, 1, eles...);
-		//	pres = prepare;
-		//}
-		//std::tuple<ELEMENTS...> a = std::make_tuple<ELEMENTS&...>(eles...);
-		prepare_func = [eles...](sql::PreparedStatement* prepare) {
-			multi_args_and_prepare::mag mmgg;
-			mmgg.pre = prepare;
-			mmgg.args(eles...);
-		};
-		pre = true;
-		return *this;
 	}
 
 	bool on_update() {
