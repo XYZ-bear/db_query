@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="头文件\fast_protobuf">
+      <UniqueIdentifier>{13ef9789-5eef-4767-b0c0-8fd4d56aff0f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="sql.h">
@@ -23,6 +26,24 @@
     </ClInclude>
     <ClInclude Include="concurrentqueue.h">
       <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="blob.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="fast_protobuf\fast_common.h">
+      <Filter>头文件\fast_protobuf</Filter>
+    </ClInclude>
+    <ClInclude Include="fast_protobuf\fast_field.h">
+      <Filter>头文件\fast_protobuf</Filter>
+    </ClInclude>
+    <ClInclude Include="fast_protobuf\fast_protobuf.h">
+      <Filter>头文件\fast_protobuf</Filter>
+    </ClInclude>
+    <ClInclude Include="fast_protobuf\fast_protobuf_unlimit.h">
+      <Filter>头文件\fast_protobuf</Filter>
+    </ClInclude>
+    <ClInclude Include="fast_protobuf\varint.h">
+      <Filter>头文件\fast_protobuf</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

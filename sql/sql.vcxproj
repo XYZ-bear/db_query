@@ -159,7 +159,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="blob.h" />
     <ClInclude Include="concurrentqueue.h" />
+    <ClInclude Include="fast_protobuf\fast_common.h" />
+    <ClInclude Include="fast_protobuf\fast_field.h" />
+    <ClInclude Include="fast_protobuf\fast_protobuf.h" />
+    <ClInclude Include="fast_protobuf\fast_protobuf_unlimit.h" />
+    <ClInclude Include="fast_protobuf\varint.h" />
     <ClInclude Include="freequene.h" />
     <ClInclude Include="sql.h" />
   </ItemGroup>

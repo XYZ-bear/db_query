@@ -28,11 +28,6 @@ using namespace std;
 #define primary_key 0x1
 #define auto_increment 0x2
 
-struct tbl_fld_link {
-	const char* tbl;
-	const char* fld;
-};
-
 template<class T>
 class __db_struct_base;
 
@@ -160,38 +155,24 @@ public:
 	template<class T>
 	static void prepare_set(const __db_struct_base<T> &val, sql::PreparedStatement *ps, size_t &index) {
 		__db_struct_base<T> &rv = const_cast<__db_struct_base<T>&>(val);
-		rv.prepare_value(ps, index);
+		rv.___prepare_value(ps, index);
 	}
 };
 
-template<class T>
-struct fds {
-	typedef void(T::*ref_type)(sql::ResultSet *res, size_t index);
-	typedef void(T::*vs_type)(string &str);
-	typedef int64_t(T::*vi_type)();
-	typedef void(T::*pv_type)(sql::PreparedStatement *ps, size_t &index);
-	ref_type ref;
-	vs_type vs;
-	vi_type vi;
-	pv_type pv;
-	char flag;
-	void set_flag(char f) {
-		flag = flag | f;
-	}
-	bool check_flag(char f) {
-		return flag & f;
-	}
-};
-
-template<class T>
-struct tbl_fld_link2 {
-	typedef void(T::*ref_type)(sql::ResultSet *res, size_t index);
-	typedef void(T::*vs_type)(string &str);
-	typedef int64_t(T::*vi_type)();
-	typedef void(T::*pv_type)(sql::PreparedStatement *ps, size_t &index);
-
+struct tbl_fld_link {
+	constexpr tbl_fld_link(const char* t, const char* f):tbl(t),fld(f) {}
 	const char* tbl;
 	const char* fld;
+};
+
+template<class T>
+struct tbl_fld_link2:public tbl_fld_link{
+	typedef void(T::*ref_type)(sql::ResultSet *res, size_t index);
+	typedef void(T::*vs_type)(string &str);
+	typedef int64_t(T::*vi_type)();
+	typedef void(T::*pv_type)(sql::PreparedStatement *ps, size_t &index);
+
+	constexpr tbl_fld_link2(const char* t, const char* f, ref_type _ref, vs_type _vs, vi_type _vi, pv_type _pv, char _flag):tbl_fld_link(t,f),ref(_ref),vs(_vs),vi(_vi),pv(_pv),flag(_flag){}
 	ref_type ref;
 	vs_type vs;
 	vi_type vi;
@@ -224,7 +205,7 @@ class colloect
 public:
 	template<class T>
 	colloect(T *obj, const tbl_fld_link2<T> *field) {
-		if (obj->inited == false) {
+		if (obj->__inited == false) {
 			obj->___add_field(field);
 		}
 	};
@@ -236,16 +217,17 @@ constexpr char flagg() {
 	return 0 | C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8;
 }
 
+
 #define table(name)\
 extern const char name_##name[]=#name;\
 class name :public __db_struct_name<name,name_##name>
 
 //static constexpr在当作参数传递时在c17以下的版本存在缺陷，会报undefine错误，不过在c17中得到了修复
 //https://stackoverflow.com/questions/8016780/undefined-reference-to-static-constexpr-char
+
 #define sql_field(type,name,...) \
 public:\
 	type name;\
-    static constexpr tbl_fld_link _##name= {_table_name,#name};\
 	void ___ref_##name(sql::ResultSet *res, size_t index){\
 		field_operator::get_feild_value(name,res,index);\
 	}\
@@ -258,23 +240,54 @@ public:\
 	void ___prepare_##name##_value(sql::PreparedStatement *ps, size_t &index){\
 		field_operator::prepare_set(name,ps,index);\
 	}\
-	static constexpr tbl_fld_link2<___table_type> _k##name= {_table_name,#name,&___table_type::___ref_##name,&___table_type::___get_##name##_value_str,&___table_type::___get_##name##_value_i64,&___table_type::___prepare_##name##_value,flagg<__VA_ARGS__>()};\
+	static constexpr tbl_fld_link2<__TBT> _##name= {_NAME,#name,&__TBT::___ref_##name,&__TBT::___get_##name##_value_str,&__TBT::___get_##name##_value_i64,&__TBT::___prepare_##name##_value,flagg<__VA_ARGS__>()};\
 private:\
-	colloect collect_##name{&instance,&_k##name};
+	colloect collect_##name{this,&_##name};
 
 template<class T>
 class __db_struct_base {
 public:
-	typedef T ___table_type;
+	typedef T __TBT;
 	const char* _tbn;
+private:
+	void build_common_sql() {
+		string space;
+		__insert_str = "insert into ";
+		__insert_str += _tbn;
+		__insert_str += '(';
+
+		__update_str = "update ";
+		__update_str += _tbn;
+		__update_str += " set ";
+
+		for (auto fi : fields_) {
+			if (!fi.second->check_flag(auto_increment)) {
+				__insert_str += fi.first;
+				__insert_str += ',';
+				space += "?,";
+
+				__update_str += fi.first;
+				__update_str += "=?,";
+			}
+		}
+		__insert_str.pop_back();
+		__insert_str += ") values(";
+		space.pop_back();
+		__insert_str += space + ')';
+
+		__update_str.pop_back();
+	}
 public:
 	__db_struct_base() {
-		instance; //模板类需要显示激活
+		__instance; //模板类需要显示激活
 		fields_;
+		//__inited = true;
 	}
 	~__db_struct_base() {
+		//build_common_sql();
+		//__inited = true;
 	}
-	bool unpack(sql::ResultSet *res) {
+	bool ___unpack(sql::ResultSet *res) {
 		auto f = res->getMetaData();
 		if (res) {
 			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_tbn) == 0) {
@@ -286,7 +299,7 @@ public:
 		}
 		return false;
 	}
-	bool unpack(sql::ResultSet *res, int64_t &key) {
+	bool ___unpack(sql::ResultSet *res, int64_t &key) {
 		if (res) {
 			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_tbn) == 0) {
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
@@ -303,7 +316,7 @@ public:
 		}
 		return false;
 	}
-	bool unpack(sql::ResultSet *res, string &key) {
+	bool ___unpack(sql::ResultSet *res, string &key) {
 		if (res) {
 			if (res->getMetaData()->getColumnCount() > 0 && res->getMetaData()->getTableName(1).compare(_tbn) == 0) {
 				for (unsigned int i = 1; i <= res->getMetaData()->getColumnCount(); i++) {
@@ -321,7 +334,7 @@ public:
 		return false;
 	}
 	void ___add_field(const tbl_fld_link2<T> *field) {
-		if (!inited) {
+		if (!__inited) {
 			auto iter = fields_.find(field->fld);
 			if (iter == fields_.end()) {
 				auto &f = fields_[field->fld];
@@ -329,37 +342,14 @@ public:
 			}
 			else {
 				build_common_sql();
-				inited = true;
+				__inited = true;
 			}
 		}
+		//if (!__inited) {
+		//	auto &f = fields_[field->fld];
+		//	f = const_cast<tbl_fld_link2<T>*>(field);
+		//}
 	};
-	void build_common_sql() {
-		string space;
-		insert_str = "insert into ";
-		insert_str += _tbn;
-		insert_str += '(';
-
-		update_str = "update ";
-		update_str += _tbn;
-		update_str += " set ";
-
-		for (auto fi : fields_) {
-			if (!fi.second->check_flag(auto_increment)) {
-				insert_str += fi.first;
-				insert_str += ',';
-				space += "?,";
-
-				update_str += fi.first;
-				update_str += "=?,";
-			}
-		}
-		insert_str.pop_back();
-		insert_str += ") values(";
-		space.pop_back();
-		insert_str += space + ')';
-
-		update_str.pop_back();
-	}
 	bool ___do_ref(const char* ele, sql::ResultSet *res, size_t index) {
 		auto iter = fields_.find(ele);
 		if (iter != fields_.end()) {
@@ -368,14 +358,14 @@ public:
 		}
 		return false;
 	}
-	void prepare_value(sql::PreparedStatement *ps, size_t &index) {
+	void ___prepare_value(sql::PreparedStatement *ps, size_t &index) {
 		for (auto &field : fields_) {
 			if (!field.second->check_flag(auto_increment)) {
 				field.second->do_pv((T*)this, ps, index);
 			}
 		}
 	}
-	void where_key(string &str) {
+	void ___where_key(string &str) {
 		str += " where ";
 		for (auto &field : fields_) {
 			if (field.second->check_flag(primary_key)) {
@@ -386,29 +376,30 @@ public:
 			}
 		}
 	}
-public:
-	static string insert_str;
-	static string update_str;
+private:
 	static std::unordered_map<string, tbl_fld_link2<T>*> fields_;
-	static bool inited;
-	static T instance;
+public:
+	static string __insert_str;
+	static string __update_str;
+	static bool __inited;
+	static T __instance;
 };
 template<class T>
-T __db_struct_base<T>::instance;
+T __db_struct_base<T>::__instance;
 template<class T>
 std::unordered_map<string, tbl_fld_link2<T>*> __db_struct_base<T>::fields_;
 template<class T>
-bool __db_struct_base<T>::inited = false;
+bool __db_struct_base<T>::__inited = false;
 template<class T>
-string __db_struct_base<T>::insert_str;
+string __db_struct_base<T>::__insert_str;
 template<class T>
-string __db_struct_base<T>::update_str;
+string __db_struct_base<T>::__update_str;
 
 
 template<class T, const char* nae>
 class __db_struct_name:public __db_struct_base<T> {
 public:
-	static constexpr const char* _table_name = nae;
+	static constexpr const char* _NAME = nae;
 	__db_struct_name(){
 		__db_struct_base<T>::_tbn = nae;
 	}
@@ -449,14 +440,14 @@ namespace detail {
 namespace multi_args_and_unpack {
 	template<class T>
 	static bool unpack(T &ele, sql::ResultSet *query_set) {
-		ele.unpack(query_set);
+		ele.___unpack(query_set);
 		return false;
 	}
 
 	template<class T>
 	static bool unpack(vector<T> &ele, sql::ResultSet *query_set) {
 		T val;
-		val.unpack(query_set);
+		val.___unpack(query_set);
 		ele.emplace_back(val);
 		return true;
 	}
@@ -734,8 +725,8 @@ public:
 	}
 	template<class T>
 	sql_query & update(T &val) {
-		string &str = T::update_str;
-		val.where_key(str);
+		string &str = T::__update_str;
+		val.___where_key(str);
 		cpy(str.c_str(), (int)str.length());
 		return values(val);
 	}
@@ -764,14 +755,6 @@ public:
 		return *this;
 	}
 
-	//template<class ...ELEMENTS>
-	//sql_query &values(ELEMENTS... eles) {
-	//	cpy(" values(", 8);
-	//	args(eles...);
-	//	pos -= 1;
-	//	cpy(")", 1);
-	//	return *this;
-	//}
 	template<class ...ELEMENTS>
 	sql_query &select(ELEMENTS... eles) {
 		cpy("select ", 7);
@@ -977,7 +960,7 @@ public:
 			size_t ri = 0;
 			while (res->next()) {
 				RES &resr = vresr[ri];
-				resr.unpack(res);
+				resr.___unpack(res);
 			}
 			res->close();
 			delete res;
@@ -991,8 +974,8 @@ public:
 		if (sql::ResultSet *res = stmt->executeQuery(end())) {
 			RES1 r1;
 			RES2 r2;
-			r1.unpack(res);
-			r2.unpack(res);
+			r1.___unpack(res);
+			r2.___unpack(res);
 			res->close();
 			delete res;
 			func(r1, r2);
