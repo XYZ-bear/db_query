@@ -97,6 +97,22 @@ protected:
 			return 0;
 		}
 	}
+
+	void scan_next() {
+		if (_type == WireType_Varint) {
+			unnext += varint_scan(unnext);
+		}
+		else if (_type == WireType_Fix32) {
+			unnext += SIZE_4_BYTE;
+		}
+		else if (_type == WireType_Fix64) {
+			unnext += SIZE_8_BYTE;
+		}
+		else {
+			size_t len = 0;
+			unnext += (varint_unpack(unnext, &len) + len);
+		}
+	}
 private:
 	void op(uint8_t o) {
 		T *entity = (T*)this;
@@ -147,7 +163,31 @@ public:
 	size_t unserialize(const unsigned char *nex, size_t size) {
 		unnext = nex;
 		unend = unnext + size;
-		op(OP_UNSERIALIZE);
+		//op(OP_UNSERIALIZE);
+		T *entity = (T*)this;
+
+		while (1) {
+			if (unnext - nex >= size)
+				break;
+			id_type key;
+			size_t tag_size = varint_unpack(unnext, &key);
+			if (tag_size > 0) {
+				id_type iid = key >> WIRE_TYPE_LEN;
+				id_type kTagTypeMask = (1 << WIRE_TYPE_LEN) - 1;
+				_type = WireType(key & kTagTypeMask);
+				unnext += tag_size;
+
+				if (iid >= 1 && iid <= fields.size()) {
+					auto field = fields[iid - 1];
+					if (field)
+						(entity->*field)(OP_UNSERIALIZE);
+				}
+				else
+					break;
+			}
+			else
+				break;
+		}
 		return unnext - nex;
 	}
 	proto_base() {
@@ -162,6 +202,7 @@ protected:
 	const unsigned char *unend;
 	size_t _size;
 	bool _is_default;
+	WireType _type;
 	//vector<operater> fields;
 	//public:
 	static vector<operater> fields;

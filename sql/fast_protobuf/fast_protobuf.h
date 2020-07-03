@@ -40,8 +40,10 @@
 										}\
 									}break;\
 									case OP_UNSERIALIZE:{\
-										if(unserialize_tag_(id,type))\
+										if(type == _type)\
 											unnext+=proto_field::unserialize_(&ele, unnext, unend);\
+										else\
+											scan_next();\
 									}break;\
 									case OP_SIZE:{_size+=(proto_field::size_(&ele)+size_tag_(id,type));}break;\
 									case OP_REFRESH:{proto_field::refresh_(&ele);}break;\

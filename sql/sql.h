@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <sstream>
 #include <functional>
 #include <vector>
 #include <time.h>
@@ -14,6 +15,7 @@
 #include <cstring>
 #include <unordered_map>
 #include "concurrentqueue.h"
+#include "fast_protobuf/fast_protobuf.h"
 #include "mysql_connection.h"
 
 #include <cppconn/driver.h>
@@ -64,6 +66,15 @@ public:
 	static void get_feild_value(float &val, sql::ResultSet *res, size_t index) {
 		val = (float)res->getDouble((uint32_t)index);
 	}
+
+	template<class T>
+	static void get_feild_value(proto_base<T> &val, sql::ResultSet *res, size_t index) {
+		char data[512];
+		std::istream *blob_input_stream = res->getBlob(index);
+		blob_input_stream->read(data, 512);
+		val.unserialize((const unsigned char*)data, 512);
+		//val = (float)res->getDouble((uint32_t)index);
+	}
 public:
 	static void get_feild_value_str(int32_t &val, string& str) {
 		str += to_string(val);
@@ -97,6 +108,11 @@ public:
 
 	static void get_feild_value_str(float &val, string& str) {
 		str += to_string(val);
+	}
+
+	template<class T>
+	static void get_feild_value_str(proto_base<T> &val, string& str) {
+		//str += to_string(val);
 	}
 public:
 	static int64_t get_feild_value_i64(int32_t &val) {
@@ -157,22 +173,24 @@ public:
 		__db_struct_base<T> &rv = const_cast<__db_struct_base<T>&>(val);
 		rv.___prepare_value(ps, index);
 	}
-};
 
-struct tbl_fld_link {
-	constexpr tbl_fld_link(const char* t, const char* f):tbl(t),fld(f) {}
-	const char* tbl;
-	const char* fld;
+	template<class T>
+	static void prepare_set(const proto_base<T> &val, sql::PreparedStatement *ps, size_t &index) {
+		proto_base<T>& proto = const_cast<proto_base<T>&>(val);
+		char data[512];
+		static std::stringstream blob_input_stream;
+		size_t len = proto.serialize((unsigned char*)data, 512);
+		blob_input_stream.write(data, len);
+		ps->setBlob((uint32_t)index++, &blob_input_stream);
+	}
 };
 
 template<class T>
-struct tbl_fld_link2:public tbl_fld_link{
+struct tbl_fld_link2{
 	typedef void(T::*ref_type)(sql::ResultSet *res, size_t index);
 	typedef void(T::*vs_type)(string &str);
 	typedef int64_t(T::*vi_type)();
 	typedef void(T::*pv_type)(sql::PreparedStatement *ps, size_t &index);
-
-	constexpr tbl_fld_link2(const char* t, const char* f, ref_type _ref, vs_type _vs, vi_type _vi, pv_type _pv, char _flag):tbl_fld_link(t,f),ref(_ref),vs(_vs),vi(_vi),pv(_pv),flag(_flag){}
 	ref_type ref;
 	vs_type vs;
 	vi_type vi;
@@ -204,23 +222,73 @@ class colloect
 {
 public:
 	template<class T>
-	colloect(T *obj, const tbl_fld_link2<T> *field) {
+	colloect(T *obj,const char* name, const tbl_fld_link2<T> *field) {
 		if (obj->__inited == false) {
-			obj->___add_field(field);
+			obj->___add_field(name, field);
 		}
 	};
 };
 
 
 template<char C1 = 0, char C2 = 0, char C3 = 0, char C4 = 0, char C5 = 0, char C6 = 0, char C7 = 0, char C8 = 0>
-constexpr char flagg() {
+constexpr char gen_flag() {
 	return 0 | C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8;
 }
 
 
+//https://stackoverflow.com/questions/48022285/building-static-strings-with-c-metaprogramming
+
+template <char ...C> struct cexpr_str
+{
+	static constexpr char value[]{ C..., '\0' };
+};
+
+namespace impl
+{
+	using std::size_t;
+
+	template <typename ...P> struct cexpr_cat
+	{
+		using type = cexpr_str<>;
+	};
+	template <typename A, typename B, typename ...P> struct cexpr_cat<A, B, P...>
+	{
+		using type = typename cexpr_cat<typename cexpr_cat<A, B>::type, P...>::type;
+	};
+	template <char ...A, char ...B> struct cexpr_cat<cexpr_str<A...>, cexpr_str<B...>>
+	{
+		using type = cexpr_str<A..., B...>;
+	};
+	template <typename T> struct cexpr_cat<T>
+	{
+		using type = T;
+	};
+
+	template <typename, typename> struct cexpr_str_subseq {};
+	template <size_t ...S, char ...C> struct cexpr_str_subseq<std::index_sequence<S...>, cexpr_str<C...>>
+	{
+		using type = cexpr_str<cexpr_str<C...>::value[S]...>;
+	};
+
+	template <size_t N> constexpr char cexpr_str_at(const char(&str)[N], size_t pos)
+	{
+		if (pos < 0 || pos >= N)
+			return '\0';
+		else
+			return str[pos];
+	}
+}
+template <typename ...P> using cexpr_cat = typename impl::cexpr_cat<P...>::type;
+
+#define MAKE_CEXPR_STR(x) ::impl::cexpr_str_subseq<::std::make_index_sequence<sizeof x - 1>,\
+                          ::cexpr_str<CEXPR_STR_16(0,x),CEXPR_STR_16(16,x),CEXPR_STR_16(32,x),CEXPR_STR_16(48,x)>>::type
+#define CEXPR_STR_16(s,x) CEXPR_STR_4(s,x),CEXPR_STR_4(s+4,x),CEXPR_STR_4(s+8,x),CEXPR_STR_4(s+12,x)
+#define CEXPR_STR_4(s,x)  ::impl::cexpr_str_at(x,s),::impl::cexpr_str_at(x,s+1),::impl::cexpr_str_at(x,s+2),::impl::cexpr_str_at(x,s+3)
+
+using dot = MAKE_CEXPR_STR(".");
+
 #define table(name)\
-extern const char name_##name[]=#name;\
-class name :public __db_struct_name<name,name_##name>
+class name :public __db_struct_name<name,MAKE_CEXPR_STR(#name)>
 
 //static constexpr在当作参数传递时在c17以下的版本存在缺陷，会报undefine错误，不过在c17中得到了修复
 //https://stackoverflow.com/questions/8016780/undefined-reference-to-static-constexpr-char
@@ -228,6 +296,7 @@ class name :public __db_struct_name<name,name_##name>
 #define sql_field(type,name,...) \
 public:\
 	type name;\
+	static constexpr const char* _##name = cexpr_cat<cat, MAKE_CEXPR_STR(#name)>::value;\
 	void ___ref_##name(sql::ResultSet *res, size_t index){\
 		field_operator::get_feild_value(name,res,index);\
 	}\
@@ -240,9 +309,9 @@ public:\
 	void ___prepare_##name##_value(sql::PreparedStatement *ps, size_t &index){\
 		field_operator::prepare_set(name,ps,index);\
 	}\
-	static constexpr tbl_fld_link2<__TBT> _##name= {_NAME,#name,&__TBT::___ref_##name,&__TBT::___get_##name##_value_str,&__TBT::___get_##name##_value_i64,&__TBT::___prepare_##name##_value,flagg<__VA_ARGS__>()};\
 private:\
-	colloect collect_##name{this,&_##name};
+	static constexpr tbl_fld_link2<__TBT> _k##name= {&__TBT::___ref_##name,&__TBT::___get_##name##_value_str,&__TBT::___get_##name##_value_i64,&__TBT::___prepare_##name##_value,gen_flag<__VA_ARGS__>()};\
+	colloect collect_##name{this,#name,&_k##name};
 
 template<class T>
 class __db_struct_base {
@@ -281,11 +350,8 @@ public:
 	__db_struct_base() {
 		__instance; //模板类需要显示激活
 		fields_;
-		//__inited = true;
 	}
 	~__db_struct_base() {
-		//build_common_sql();
-		//__inited = true;
 	}
 	bool ___unpack(sql::ResultSet *res) {
 		auto f = res->getMetaData();
@@ -333,11 +399,11 @@ public:
 		}
 		return false;
 	}
-	void ___add_field(const tbl_fld_link2<T> *field) {
+	void ___add_field(const char* name, const tbl_fld_link2<T> *field) {
 		if (!__inited) {
-			auto iter = fields_.find(field->fld);
+			auto iter = fields_.find(name);
 			if (iter == fields_.end()) {
-				auto &f = fields_[field->fld];
+				auto &f = fields_[name];
 				f = const_cast<tbl_fld_link2<T>*>(field);
 			}
 			else {
@@ -345,10 +411,6 @@ public:
 				__inited = true;
 			}
 		}
-		//if (!__inited) {
-		//	auto &f = fields_[field->fld];
-		//	f = const_cast<tbl_fld_link2<T>*>(field);
-		//}
 	};
 	bool ___do_ref(const char* ele, sql::ResultSet *res, size_t index) {
 		auto iter = fields_.find(ele);
@@ -395,13 +457,13 @@ string __db_struct_base<T>::__insert_str;
 template<class T>
 string __db_struct_base<T>::__update_str;
 
-
-template<class T, const char* nae>
-class __db_struct_name:public __db_struct_base<T> {
+template<class T, class nae>
+class __db_struct_name :public __db_struct_base<T> {
 public:
-	static constexpr const char* _NAME = nae;
-	__db_struct_name(){
-		__db_struct_base<T>::_tbn = nae;
+	static constexpr const char* _NAME = nae::value;
+	using cat = cexpr_cat<nae, dot>;
+	__db_struct_name() {
+		__db_struct_base<T>::_tbn = _NAME;
 	}
 };
 
@@ -684,12 +746,6 @@ private:
 		cpy(",", 1);
 	}
 
-	void appand(tbl_fld_link &link) {
-		cpy(link.tbl, (int)strlen(link.tbl));
-		cpy(".", 1);
-		cpy(link.fld, (int)strlen(link.fld));
-		cpy(",", 1);
-	}
 	template<class ELEMENT, class ...ELEMENTS>
 	sql_query &args(ELEMENT& ele, ELEMENTS&... eles) {
 		appand(ele);
@@ -737,10 +793,10 @@ public:
 	}
 	template<class T>
 	sql_query & insert(T &val) {
-		string &str = T::insert_str;;
+		string &str = T::__insert_str;
 		cpy(str.c_str(), str.length());
 		return values(val);
-	}
+	}  
 
 	function<void(sql::PreparedStatement*)> prepare_func;
 	bool pre;
@@ -798,26 +854,6 @@ public:
 		return *this;
 	}
 
-	sql_query &equal(const tbl_fld_link &link, int val) {
-		cpy(link.tbl, (int)strlen(link.tbl));
-		cpy(".", 1);
-		cpy(link.fld, (int)strlen(link.fld));
-		cpy("=", 1);
-		sprintf(pos, "%d", val);
-		pos += strlen(pos);
-		return *this;
-	}
-
-	sql_query &equal(const tbl_fld_link &link, const char* val) {
-		cpy(link.tbl, (int)strlen(link.tbl));
-		cpy(".", 1);
-		cpy(link.fld, (int)strlen(link.fld));
-		cpy("='", 2);
-		cpy(val, (int)strlen(val));
-		cpy("'", 1);
-		return *this;
-	}
-
 	sql_query &equal(const char* key, int val) {
 		cpy(key, (int)strlen(key));
 		cpy("=", 1);
@@ -841,23 +877,7 @@ public:
 		pos += strlen(pos);
 		return *this;
 	}
-	sql_query &not_equal(const tbl_fld_link &link, const char* val) {
-		cpy(link.tbl, (int)strlen(link.tbl));
-		cpy(".", 1);
-		cpy(link.fld, (int)strlen(link.fld));
-		cpy("!=", 1);
-		cpy(val, (int)strlen(val));
-		return *this;
-	}
-	sql_query &not_equal(const tbl_fld_link &link, int val) {
-		cpy(link.tbl, (int)strlen(link.tbl));
-		cpy(".", 1);
-		cpy(link.fld, (int)strlen(link.fld));
-		cpy("!=", 2);
-		sprintf(pos, "%d", val);
-		pos += strlen(pos);
-		return *this;
-	}
+
 	sql_query &not_equal(const char* key, const char* val) {
 		cpy(key, (int)strlen(key));
 		cpy("!=", 1);
