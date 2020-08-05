@@ -27,9 +27,6 @@
     <ClInclude Include="concurrentqueue.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="blob.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="fast_protobuf\fast_common.h">
       <Filter>头文件\fast_protobuf</Filter>
     </ClInclude>

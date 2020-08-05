@@ -1,0 +1,8 @@
+{
+   "name":"Bill Gates",
+   "age":62,
+   "cars": [
+	  { "name":"Porsche",  "models":[ "911", "Taycan" ] },
+	  { "name":"BMW", "models":[ "M5", "M3", "X5" ] },
+	  { "name":"Volvo", "models":[ "XC60", "V60" ] }
+   ]
