@@ -9,6 +9,149 @@
 #include <unordered_map>
 using namespace std;
 
+int blob(const char* begin);
+int parase(const char* begin);
+int for_key_value(const char* begin);
+int for_array(const char* begin);
+
+int for_str(const char* begin) {
+	int index = 0;
+	bool start = false;
+	while (char ch = *(begin + index)) {
+		if (ch == '"') {
+			if (start)
+				return index;
+			start = true;
+		}
+		index++;
+	}
+	return 0;
+}
+
+//{fsff{ sfsdf{} }}";
+int for_blob(const char* begin) {
+	int index = 0;
+	int start = -1;
+	while (char ch = *(begin + index)) {
+		if (ch == '{') {
+			if (start != -1) {
+				index += for_blob(begin + index);
+			}
+			else
+				start = index;
+		}
+		else if (ch == '}') {
+			return index;
+		}
+		else if (ch == '"') {
+			return for_key_value(begin + index);
+		}
+		//else {
+		//	return parase(begin + index);
+		//}
+		index++;
+	}
+	return index;
+}
+
+int for_key_value(const char* begin) {
+	int index = 0;
+	int key_start = -1;
+	int key_end = -1;
+	int val_start = -1;
+	int val_end = -1;
+
+	bool wait_val = false;
+	while (char ch = *(begin + index)) {
+		if (ch == '"') {
+			if (key_start == -1) {
+				key_start = index;
+				index += for_str(begin + index);
+				key_end = index;
+				cout << string(begin + key_start, key_end - key_start + 1) << endl;
+			}
+			else {
+				if (wait_val) {
+					val_start = index;
+					index += for_str(begin + index);
+					val_end = index;
+					cout << string(begin + val_start, val_end - val_start + 1) << endl;
+					return index;
+				}
+			}
+		}
+		else if (wait_val && ch == '['){
+			return for_array(begin + index);
+			val_start = -1;
+			wait_val = false;
+		}
+		else if (wait_val && ch == '{') {
+			return for_blob(begin + index);
+			val_start = -1;
+			wait_val = false;
+		}
+		else if (ch == ':') {
+			wait_val = true;
+		}
+		else if (wait_val && val_start == -1 && ch != ' ') {
+			val_start = index;
+		}
+		else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == '}' || ch == ']')) {
+			val_end = index;
+			cout << string(begin + val_start, val_end - val_start) << endl;
+			return index;
+		}
+		index++;
+	}
+	return 0;
+}
+
+
+int parase(const char* begin) {
+	int index = 0;
+	while (char ch = *(begin + index)) {
+		if (ch == '{') {
+			index+= for_blob(begin + index);
+		}
+		else if (ch == '"') {
+			index += for_key_value(begin + index);
+		}
+		else if (ch == '[') {
+			index += for_array(begin + index);
+		}
+		const char* cc = begin + index;
+		index++;
+	}
+	return index;
+}
+
+
+int for_array(const char* begin) {
+	int index = 0;
+	bool start = false;
+
+	int val_start = -1;
+
+	while (char ch = *(begin + index)) {
+		if (ch == ']') {
+			return index;
+		}
+		else if (ch == '[') {}
+		else if (ch == '{') {
+			return for_blob(begin + index);
+		}
+		else if (val_start == -1 && ch != ' ' && ch != '\t') {
+			val_start = index;
+		}
+		else if (val_start != -1 && ch == ' ' || ch == ',') {
+			cout << string(begin + val_start, index - val_start) << endl;
+			val_start = -1;
+		}
+		index++;
+	}
+	return index;
+}
+
 int blob(const char* begin) {
 	const char* next = begin;
 	int key_begin = -1;
@@ -26,7 +169,6 @@ int blob(const char* begin) {
 				if (val_begin != 0) {
 					cout << "key:" << string(begin + key_begin + 1, key_end - key_begin - 1) << endl;
 				}
-				key_begin = 0;
 				is_blob = true;
 				int i = blob(next + 1) + 1;
 				next += i;
@@ -40,7 +182,7 @@ int blob(const char* begin) {
 		else if (ch == '"') {
 			is_blob = false;
 			if (0 == val_begin) {
-				if ( key_begin != 0) {
+				if ( key_begin != -1) {
 					key_end = index;
 				}
 				else
@@ -59,9 +201,7 @@ int blob(const char* begin) {
 		else if (ch == ',') {
 			if (is_str == 0) {
 				val_end = index;
-				if (key_begin == -1)
-					key_begin++;
-				if (!is_blob) {
+				if (!is_blob || is_array) {
 					cout << "key:" << string(begin + key_begin + 1, key_end - key_begin - 1) << endl;
 					cout << "val:" << string(begin + val_begin + 1, val_end - val_begin - 1) << endl;
 				}
@@ -70,20 +210,35 @@ int blob(const char* begin) {
 					val_begin = index;
 				else {
 					val_begin = 0;
-					key_begin = 0;
+					key_begin = -1;
 				}
 
 			}
 		}
-		else if (ch == '}' || ch == ']') {
+		else if (ch == ']') {
 			if (is_str == 0) {
 				val_end = index;
 				if (!is_blob) {
 					cout << "key:" << string(begin + key_begin + 1, key_end - key_begin - 1) << endl;
 					cout << "val:" << string(begin + val_begin + 1, val_end - val_begin - 1) << endl;
 				}
+				is_array = false;
+
 				val_begin = 0;
-				key_begin = 0;
+				key_begin = -1;
+			}
+		}
+		else if (ch == '}') {
+			if (is_str == 0) {
+				if (key_begin != -1) {
+					val_end = index;
+					if (!is_blob) {
+						cout << "key:" << string(begin + key_begin + 1, key_end - key_begin - 1) << endl;
+						cout << "val:" << string(begin + val_begin + 1, val_end - val_begin - 1) << endl;
+					}
+					val_begin = 0;
+					key_begin = -1;
+				}
 			}
 			return index;
 		}
@@ -129,21 +284,21 @@ public:
 		while (*next) {
 			char ch = *next;
 			if (ch == '{') {
-				if (is_str == 0) {
-					if (val_begin != 0) {
-						is_blob = true;
-						string key(begin + key_begin + 1, key_end - key_begin - 1);
-						int i = unserialize(key, begin + val_begin + 1, val_end - val_begin - 1) + 1;
-						next += i;
-						index += i;
+					if (is_str == 0) {
+						if (val_begin != 0) {
+							is_blob = true;
+							string key(begin + key_begin + 1, key_end - key_begin - 1);
+							int i = unserialize(key, begin + val_begin + 1, val_end - val_begin - 1) + 1;
+							next += i;
+							index += i;
+						}
+						else {
+							is_blob = true;
+							int i = blob(next + 1) + 1;
+							next += i;
+							index += i;
+						}
 					}
-					else {
-						is_blob = true;
-						int i = blob(next + 1) + 1;
-						next += i;
-						index += i;
-					}
-				}
 			}
 			else if (ch == '[') {
 				is_array = true;
@@ -152,7 +307,7 @@ public:
 			else if (ch == '"') {
 				is_blob = false;
 				if (0 == val_begin) {
-					if (key_begin != 0) {
+					if (key_begin != -1) {
 						key_end = index;
 					}
 					else
@@ -171,9 +326,7 @@ public:
 			else if (ch == ',') {
 				if (is_str == 0) {
 					val_end = index;
-					if (key_begin == -1)
-						key_begin++;
-					if (!is_blob) {
+					if (!is_blob || is_array) {
 						string key(begin + key_begin + 1, key_end - key_begin - 1);
 						unserialize(key, begin + val_begin + 1, val_end - val_begin - 1);
 					}
@@ -181,19 +334,34 @@ public:
 						val_begin = index;
 					else {
 						val_begin = 0;
-						key_begin = 0;
+						key_begin = -1;
 					}
 				}
 			}
-			else if (ch == '}' || ch == ']') {
+			else if (ch == ']') {
 				if (is_str == 0) {
 					val_end = index;
 					if (!is_blob) {
 						string key(begin + key_begin + 1, key_end - key_begin - 1);
 						unserialize(key, begin + val_begin + 1, val_end - val_begin - 1);
 					}
+					is_array = false;
+
 					val_begin = 0;
-					key_begin = 0;
+					key_begin = -1;
+				}
+			}
+			else if (ch == '}') {
+				if (is_str == 0) {
+					if (key_begin != -1) {
+						val_end = index;
+						if (!is_blob) {
+							string key(begin + key_begin + 1, key_end - key_begin - 1);
+							unserialize(key, begin + val_begin + 1, val_end - val_begin - 1);
+						}
+						val_begin = 0;
+						key_begin = -1;
+					}
 				}
 				return index;
 			}
@@ -249,7 +417,7 @@ public:
 	}
 	template<class T>
 	static size_t us(json_base_t<T> *data, const char* begin, size_t len) {
-		return data->blob(begin + 1);
+		return data->blob(begin);
 	}
 };
 
@@ -294,20 +462,40 @@ Json(NN) {
 public:
 	string N(name);
 	int N(age);
-	Car N(cars);
+	vector<Car> N(cars);
 };
 
 #include <map>
+#include <functional>
+#include <time.h>
 
-
+void perf_test(string name, size_t t, function<void()> f) {
+	clock_t startTime, endTime;
+	startTime = clock();
+	for (size_t i = 0; i < t; i++)
+		f();
+	endTime = clock();
+	cout << name << ":" << endTime - startTime << "ms" << endl;
+}
 
 int main()
 {
-	const char* jo = "{  \"a\":1,\"b\":2,\"e\":{\"a\":1,\"b\":2},\"c\":\"sfsf\",\"d\":3,\"f\":[1,2,3]}";
-	blob(jo);
+	//const char* str1 = "\"sfsdf\"";
+	//cout << for_str(str1) << endl;
 
-	ff kkl;
-	kkl.blob(jo);
+	//const char* str2 = "{fsff{sfsdf{}}}";
+	//for_blob(str2);
+
+	cout << "key_val" << endl;
+	const char* str3 = "{   \"yes\" : \"hello\",\"hh\":123 }";
+	parase(str3);
+	//parase(str3);
+	//getchar();
+	//const char* jo = "{  \"a\":1,\"b\":2,\"e\":{\"a\":1,\"b\":2},\"c\":\"sfsf\",\"d\":3,\"f\":[1,2,3]}";
+	//blob(jo);
+
+	//ff kkl;
+	//kkl.blob(jo);
 	ifstream myfile("hello.txt");
 	string jj;
 	string temp;
@@ -321,6 +509,17 @@ int main()
 	}
 	myfile.close();
 
+	//perf_test("table build 1", 1, [&jj]()->void {
+	//	for (int i = 0; i < 100000; i++)
+	//		parase(jj.data());
+	//});
+	parase(jj.data());
+	//perf_test("table build 1", 1, [&jj]()->void {
+	//	for (int i = 0; i < 100000; i++)
+	//		blob(jj.data());
+	//});
+	blob(jj.data());
+	parase(jj.data());
 
 	const char *json = "{\"employee\":{ \"name\":\"Bill Gates\", \"age\" : 62, \"city\" : \"Seattle\" },\"job\":\"seal\"}";
 	blob(jj.data());
