@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>登陆.html</title>
+  </head>
+  <body>
+    <form name="user" action="#" method="get">
+       <table  align="center">
+          <tr>
+             <td>用户名</td>
+             <td>
+                <input type="text" name="username" id="username"/>
+            </td>
+          </tr>
+          <tr>
+             <td>密码</td>
+             <td>
+                <input type="password" name='pwd' id="pwd"/>
+            </td>
+          </tr>
+          <tr>
+             <td>性别</td>
+             <td>
+                <input type="radio" name="name" checked="checked"/>男
+                <input type="radio" name="name"/>女
+            </td>
+          </tr>
+            <tr>
+                <td>头像</td>
+                <td>
+                    <input class="btn-file" type="file" name="file" />
+                </td>
+            </tr>
+          <tr>
+             <td>住址</td>
+             <td>
+                <select>
+                   <option value='广东省' selected="selected">广东</option>
+                   <option >北京市</option>
+                   <option>山东</option>
+                </select>省&nbsp;&nbsp;
+                <select>
+                   <option>深圳</option>                    <option>北京</option>                   <option>青岛</option>
+                </select>市br
+            </td>
+          </tr>
+          <tr>
+             <td>爱好</td>
+             <td>
+                <input type="checkbox" name="sport" checked="checked"/>篮球
+                <input type="checkbox" name="basketball"/>足球
+                <input type="checkbox" name="volleyball"/>看书
+            </td>
+          </tr>
+          <tr>
+             <td>备注信息</td>
+             <td>
+                <textarea rows="15" cols="50" name="res" id="res"></textarea>
+            </td>
+          </tr>
+          <tr>
+             <td></td>
+             <td>
+                <input type="submit" id="id" value="登陆" onclick="return sub()"/>
+                    <script><!--检查用户名 密码-->
+
+                    function pares(json){
+                        for(var p in json){//遍历json对象的每个key/value对,p为key
+                            if(typeof json[p] == 'object'){
+                                pares(json[p]);
+                            }
+                            console.log(json[p]);
+                            document.getElementById("res").innerHTML += p + " " + myJson[p];
+                        }
+                    }
+                    function sub(){
+                        myJson = {"basic":{"cid":"","location":"","lon":"","lat":"","ca":0,"parent_city":"","admin_area":"","cnty":"","tz":""},"basics":[]};
+ 
+                        pares(myJson);
+                        //var username=document.getElementById("username").value
+                        //var pwd=document.getElementById("username").value
+                        //alert("用户名: "+username+" "+"密码: "+pwd);
+                    }
+                    </script>
+                <input type="reset" name="reset" value="重置"/>
+            </td>
+          </tr>
+       </table>
+    </form>
+  </body>
+</html>

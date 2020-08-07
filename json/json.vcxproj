@@ -23,7 +23,7 @@
     <ProjectGuid>{7911C648-67AA-4E37-8718-9F5BAE95D792}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>json</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -151,7 +151,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="json.hpp" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="xyz_json.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="json.cpp" />

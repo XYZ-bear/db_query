@@ -18,6 +18,12 @@
     <ClInclude Include="pch.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="json.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="xyz_json.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
