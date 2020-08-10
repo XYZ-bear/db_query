@@ -3,6 +3,7 @@ window.onload = function () {
     document.getElementById("json_code").value = JSON.stringify({
         "problems": 123, "sfsf": "sf", "fsf": { "sfsf": "sf" }, "fsfddd": [{}]
     });
+    read_storage();
     run();
 }
 
@@ -39,7 +40,11 @@ function pares(c_node, json, blob) {
     for (var p in json) {//遍历json对象的每个key/value对,p为key
         if (Array.isArray(json[p])) {
             if (json[p].length > 0) {
-                if (typeof json[p][0] == 'object') {
+                if(Array.isArray(json[p][0])){
+                    c_node.value += vec_type + "<";
+                    pares(c_node, json[p][0], blob);
+                }
+                else if (typeof json[p][0] == 'object') {
                     //c_node.value += "\n";
                     add_tab(c_node, blob);
                     c_node.value += "Json(" + p + "_t){\n";
@@ -55,20 +60,20 @@ function pares(c_node, json, blob) {
                     if (typeof json[p][0] == "string") {
                         c_node.value += str_type;
                     }
-                    else if (isInteger(json[p]))
+                    else if (isInteger(json[p][0]))
                         c_node.value += int_type;
-                    else if (isFloat(json[p]))
+                    else if (isFloat(json[p][0]))
                         c_node.value += float_type;
-                    else if (typeof json[p] == "boolean")
+                    else if (typeof json[p][0] == "boolean")
                         c_node.value += bool_type;
                     else
-                        c_node.value += (typeof json[p]);// + JSON.stringify(json[p]) + "\n");
+                        c_node.value += (typeof json[p][0]);// + JSON.stringify(json[p]) + "\n");
                     c_node.value += "> N(" + p + ")" + ";\n"
                 }
             }
             else {
                 add_tab(c_node, blob);
-                c_node.value += (str_type + " N(" + p + ")" + ";\n");
+                c_node.value += (vec_type + " N(" + p + ")" + ";\n");
             }
 
         }
@@ -136,7 +141,7 @@ function pares2(c_node, json, blob) {
             }
             else {
                 ele_define += add_tab2();
-                ele_define += (str_type + " N(" + p + ")" + ";\n");
+                ele_define += (vec_type + " N(" + p + ")" + ";\n");
             }
 
         }
@@ -179,42 +184,43 @@ function do_stringfy(json, blob) {
     blob++;
     var ele_define = "";
     var str = "";
-    for (var p in json) {//遍历json对象的每个key/value对,p为key
-        if (Array.isArray(json[p])) {
-            str += add_tab3(blob);
-            str += "\"" + p + "\":[";
 
-            if (json[p].length > 0) {
-                for (j = 0; j < json[p].length; j++) {
-                    if (typeof json[p][j] == 'object' && JSON.stringify(json[p][j]) != "{}" && json[p][j]!=null) {
-                        if (json[p] != null) {
-                            str += "{\n";
-                            str += do_stringfy(json[p][j], blob);
-                            str = str.substr(0, str.length - 2);
-                            str += "\n" + add_tab3(blob) + "},";
-                        }
-                        else {
-                            str += add_tab3(blob);
-                            str += "\"" + p + "\":" + json[p] + ",\n";
-                        }
-                    }
-                    else if (JSON.stringify(json[p][j]) == "{}") {
-                        str += "{}\n";
-                    }
-                    else {
-                        if (typeof json[p][j] == "string") {
-                            str += "\"" + json[p][j] + "\",";
-                        }
-                        else
-                            str += json[p][j] + ",";
-                    }
-                }
-                str = str.substr(0, str.length - 1);
-                str += "],\n";
+    if (Array.isArray(json)) {
+        for (j = 0; j < json.length; j++) {
+            if (Array.isArray(json[j])) {
+                str += "[";
+                str += do_stringfy(json[j], blob);
+                //str = str.substr(0, str.length - 2);
+                //str += "\n" + add_tab3(blob) + "],";
+                str += "]";
+            }
+            else if (typeof json[j] == 'object' && JSON.stringify(json[j]) != "{}" && json[j] != null) {
+                str += "{\n";
+                str += do_stringfy(json[j], blob);
+                str = str.substr(0, str.length - 2);
+                str += "\n" + add_tab3(blob) + "},";
+            }
+            else if (JSON.stringify(json[j]) == "{}") {
+                str += "{}\n";
             }
             else {
-                str += "],\n";
+                if (typeof json[j] == "string") {
+                    str += "\"" + json[j] + "\",";
+                }
+                else
+                    str += json[j] + ",";
             }
+        }
+        return str;
+    }
+
+    for (var p in json) {//遍历json对象的每个key/value对,p为key
+        if (Array.isArray(json[p])) {
+            str += add_tab3(blob); 
+            str += "\"" + p + "\":[";
+            if (json[p].length>0)
+            str += do_stringfy(json[p], blob);
+            str += "],\n";
         }
         else if (typeof json[p] == 'object') {
             if (json[p] != null) {
@@ -248,6 +254,35 @@ function stringfy(json) {
     str += do_stringfy(json, 0);
     str = str.substr(0, str.length - 2);
     return str + "\n}";
+}
+
+function read_storage() {
+    if (window.localStorage.getItem("inited") != null) {
+        document.getElementById("int_type").value = window.localStorage.getItem("int_type");
+        document.getElementById("float_type").value = window.localStorage.getItem("float_type");
+        document.getElementById("bool_type").value = window.localStorage.getItem("bool_type");
+        document.getElementById("vec_type").value = window.localStorage.getItem("vec_type");
+        document.getElementById("str_type").value = window.localStorage.getItem("str_type");
+        document.getElementById("class_name").value = window.localStorage.getItem("class_name");
+        document.getElementById("tab_len").value = window.localStorage.getItem("tab_len");
+        document.getElementById("r1").value = window.localStorage.getItem("r1");
+        document.getElementById("r2").value = window.localStorage.getItem("r2");
+        document.getElementById("json_code").value = window.localStorage.getItem("json_code");
+    }
+}
+
+function write_storage() {
+    window.localStorage.setItem("int_type",document.getElementById("int_type").value);
+    window.localStorage.setItem("float_type",document.getElementById("float_type").value);
+    window.localStorage.setItem("bool_type",document.getElementById("bool_type").value);
+    window.localStorage.setItem("vec_type",document.getElementById("vec_type").value);
+    window.localStorage.setItem("str_type",document.getElementById("str_type").value);
+    window.localStorage.setItem("class_name",document.getElementById("class_name").value);
+    window.localStorage.setItem("tab_len",document.getElementById("tab_len").value);
+    window.localStorage.setItem("r1",document.getElementById("r1").value);
+    window.localStorage.setItem("r2",document.getElementById("r2").value);
+    window.localStorage.setItem("json_code",document.getElementById("json_code").value);
+    window.localStorage.setItem("inited",true);
 }
 
 function run() {
@@ -287,9 +322,12 @@ function run() {
 
         } catch (e) {
             c_code_node.value = "json format error";//'error：' + str + '!!!' + e;
+            console.log(e);
             return false;
         }
     }
+
+    write_storage();
 }
 </script>
 
