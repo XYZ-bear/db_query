@@ -452,6 +452,7 @@ Json(Test4)
 {
 public:
 	Json(profile_t) {
+	public:
 		string N(lastName);
 		vector<vector<int>> N(firstName);
 		double N(age);
@@ -488,111 +489,12 @@ void utf_8() {
 	myfile.close();
 
 	Test4 ffff;
-	ffff.for_blob(jj.data());
+	ffff.unserialize(jj.data());
 	getchar();
 }
 
-class sffsd :public nlohmann::json {
-};
-
-class kk :public nlohmann::json_sax<sffsd> {
-public:
-	bool null() { return false; };
-
-	/*!
-	@brief a boolean value was read
-	@param[in] val  boolean value
-	@return whether parsing should proceed
-	*/
-	bool boolean(bool val) { return false; };
-
-	/*!
-	@brief an integer number was read
-	@param[in] val  integer value
-	@return whether parsing should proceed
-	*/
-	bool number_integer(number_integer_t val) { return false; };
-
-	/*!
-	@brief an unsigned integer number was read
-	@param[in] val  unsigned integer value
-	@return whether parsing should proceed
-	*/
-	bool number_unsigned(number_unsigned_t val) { return false; };
-
-	/*!
-	@brief an floating-point number was read
-	@param[in] val  floating-point value
-	@param[in] s    raw token value
-	@return whether parsing should proceed
-	*/
-	bool number_float(number_float_t val, const string_t& s) { return false; };
-
-	/*!
-	@brief a string was read
-	@param[in] val  string value
-	@return whether parsing should proceed
-	@note It is safe to move the passed string.
-	*/
-	bool string(string_t& val) { return false; };
-
-	/*!
-	@brief a binary string was read
-	@param[in] val  binary value
-	@return whether parsing should proceed
-	@note It is safe to move the passed binary.
-	*/
-	virtual bool binary(binary_t& val){ return false; };
-
-	/*!
-	@brief the beginning of an object was read
-	@param[in] elements  number of object elements or -1 if unknown
-	@return whether parsing should proceed
-	@note binary formats may report the number of elements
-	*/
-	bool start_object(std::size_t elements) { return false; };
-
-	/*!
-	@brief an object key was read
-	@param[in] val  object key
-	@return whether parsing should proceed
-	@note It is safe to move the passed string.
-	*/
-	bool key(string_t& val) { return false; };
-
-	/*!
-	@brief the end of an object was read
-	@return whether parsing should proceed
-	*/
-	bool end_object() { return false; };
-
-	/*!
-	@brief the beginning of an array was read
-	@param[in] elements  number of array elements or -1 if unknown
-	@return whether parsing should proceed
-	@note binary formats may report the number of elements
-	*/
-	bool start_array(std::size_t elements) { return false; };
-
-	/*!
-	@brief the end of an array was read
-	@return whether parsing should proceed
-	*/
-	bool end_array() { return false; };
-
-	bool parse_error(std::size_t position,
-		const std::string& last_token,
-		const nlohmann::detail::exception& ex) {
-		return false;
-	}
-
-	~kk() {};
-};
-
 int main()
 {
-	std::vector<std::uint8_t> input = { 0xA1, 0x63, 0x66, 0x6F, 0x6F, 0x41, 0x00 };
-
 	// callback to set binary_seen to true if a binary value was seen
 	bool binary_seen = false;
 	auto callback = [&binary_seen](int /*depth*/, nlohmann::json::parse_event_t /*event*/, nlohmann::json & parsed)
@@ -638,12 +540,12 @@ int main()
 
 	string res;
 
-	perf_test("table build 1", 10000, []()->void {
+	perf_test("table build 1", 10000, [&res]()->void {
 		Test4 ffff;
-		ffff.for_blob(R({
+		ffff.unserialize(R({
 			"profile": {
 			"firstName": [[1]],
-				"lastName" : "John",
+				"lastName" : "&#x4F60;&#x597D;",
 				"age" : -30.3,
 				"gender" : "Male",
 				"address" : {
@@ -665,13 +567,14 @@ int main()
 					"marital_status": true
 		}
 			}));
+		ffff.profile.lastName;
 	});
 
 	perf_test("table build 1", 10000, []()->void {
 		nlohmann::json patch = R"({
 		"profile": {
-		"firstName": [[]],
-			"lastName" : "John",
+		"firstName": [[1]],
+			"lastName" : "&#x4F60;&#x597D;",
 			"age" : 30,
 			"gender" : "Male",
 			"address" : {
@@ -694,7 +597,7 @@ int main()
 	}
 		}
 	)"_json;
-
+		patch["profile"]["lastName"].get<string>();
 	});
 	//cout << res << endl;
 	//for_blob(res.data());
@@ -791,7 +694,7 @@ int main()
 
 
 	HeWeather6 f;
-	f.for_blob(R(
+	f.unserialize(R(
 	{
 		"basic": {
 			"cid": "CN101010100",

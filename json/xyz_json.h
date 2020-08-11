@@ -26,6 +26,19 @@ public:
 
 template<class T>
 class json_base_t {
+	enum json_key_symbol
+	{
+		object_begin = '{',
+		object_end = '}',
+
+		array_begin = '[',
+		array_end = ']',
+
+		key_value_separator = ':',
+		next_key_value = ',',
+		str = '"',
+		space = ' '
+	};
 public:
 	typedef T child_t;
 	void __add_field(const char* name, const date_imple_t<T>* field) {
@@ -37,13 +50,18 @@ public:
 		}
 	}
 private:
+	bool is_ctr_or_space_char(char ch) {
+		if ((ch >= 0x00 && ch <= 0x1F) || ch == 0x7F || ch == ' ')
+			return true;
+		return false;
+	}
 	// parse the string in quotes like "xxx",return the index of the last quote
 	// case: "xxx"
 	int parse_str(const char* begin) {
 		int index = 0;
 		bool start = false;
 		while (char ch = *(begin + index)) {
-			if (ch == '"') {
+			if (ch == json_key_symbol::str) {
 				if (start)
 					return index;
 				start = true;
@@ -68,7 +86,7 @@ private:
 
 		bool wait_val = false;
 		while (char ch = *(begin + index)) {
-			if (ch == '"') {
+			if (ch == json_key_symbol::str) {
 				if (key_start == -1) {
 					key_start = index;
 					index += parse_str(begin + index);
@@ -82,49 +100,36 @@ private:
 
 						string key(begin + key_start + 1, key_end - key_start - 1);
 						unserialize(key, begin + val_start, val_end - val_start + 1);
-
-						//cout << string(begin + key_start, key_end - key_start + 1) << "  " << string(begin + val_start, val_end - val_start + 1) << endl;
-						//cout << string(begin + val_start, val_end - val_start + 1) << endl;
 						return index;
 					}
 				}
 			}
-			else if (wait_val && ch == '[') {
+			else if (wait_val && ch == json_key_symbol::array_begin) {
 				string key(begin + key_start + 1, key_end - key_start - 1);
-				//unserialize(key, begin + index, 0);
-
-				//cout << string(begin + key_start, key_end - key_start + 1) << "   ";
 				return index + parse_array(key, begin + index);
 			}
-			else if (wait_val && ch == '{') {
-				//cout << string(begin + key_start, key_end - key_start + 1) << "   ";
-
+			else if (wait_val && ch == json_key_symbol::object_begin) {
 				string key(begin + key_start + 1, key_end - key_start - 1);
 				return index + unserialize(key, begin + index, 0);
-
-
-				//return index + for_blob(begin + index);
 			}
-			else if (ch == ':') {
+			else if (ch == json_key_symbol::key_value_separator) {
 				wait_val = true;
 			}
-			else if (wait_val && val_start == -1 && ch != ' ') {
+			else if (wait_val && val_start == -1 && !is_ctr_or_space_char(ch)) {
 				val_start = index;
 			}
-			else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == '}')) {
+			else if (val_start != -1 && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::object_end)) {
 				val_end = index;
 
 				string key(begin + key_start + 1, key_end - key_start - 1);
 				unserialize(key, begin + val_start, val_end - val_start);
 
-				//cout << string(begin + key_start, key_end - key_start + 1) << "  " << string(begin + val_start, val_end - val_start) << endl;
 				return index - 1;
 			}
 			index++;
 		}
 		if (val_start != -1 && val_end == -1) {
 			val_end = index - 1;
-			//cout << "k:" << string(begin + key_start, key_end - key_start + 1) << "  v:" << string(begin + val_start, val_end - val_start + 1) << endl;
 		}
 		else
 			cout << begin << ":error" << endl;
@@ -137,115 +142,67 @@ private:
 		int val_start = -1;
 
 		while (char ch = *(begin + index)) {
-			if (ch == ']') {
+			if (ch == json_key_symbol::array_end) {
 				if (val_start != -1) {
 					unserialize(key, begin + val_start, index - val_start);
-					//cout << string(begin + val_start, index - val_start) << " ";
 				}
 				return index;
 			}
-			else if (ch == '[') {
+			else if (ch == json_key_symbol::array_begin) {
 				index += parse_array(key, begin + index + 1);
 				val_start = -1;
 			}
-			else if (ch == '"') {
+			else if (ch == json_key_symbol::str) {
 				val_start = index;
 				int len = for_str(begin + index);
 				unserialize(key, begin + val_start, len + 1);
-				//cout << string(begin + val_start, len + 1) << " ";
 				index += len;
 				val_start = -1;
 			}
-			else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == ']' || ch == '}')) {
+			else if (val_start != -1 && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::array_end || ch == json_key_symbol::object_end)) {
 				unserialize(key, begin + val_start, index - val_start);
-				//cout << string(begin + val_start, index - val_start) << " ";
 				val_start = -1;
 			}
-			else if (ch == '{') {
+			else if (ch == json_key_symbol::object_begin) {
 				val_start = index;
 				index += unserialize(key, begin + index, 0);
-				//index += for_blob(begin + index);
 				val_start = -1;
 			}
-			else if (val_start == -1 && (ch != ' ' && ch != '\t' && ch != ',' && ch != '}')) {
+			else if (val_start == -1 && (!is_ctr_or_space_char(ch) && ch != json_key_symbol::next_key_value && ch != json_key_symbol::object_end)) {
 				val_start = index;
 			}
 
 			index++;
 		}
 		return index;
-		//int index = 0;
-		//bool start = false;
-
-		//int val_start = -1;
-
-		//bool wait_val = true;
-		//while (char ch = *(begin + index)) {
-		//	if (ch == ']') {
-		//		return index;
-		//	}
-		//	else if (ch == '[') {}
-		//	else if (ch == '"') {
-		//		val_start = index;
-		//		int len = parse_str(begin + index);
-		//		//cout << string(begin + val_start, len + 1) << " ";
-
-		//		unserialize(key, begin + val_start, len + 1);
-		//		index += len;
-		//		wait_val = false;
-		//		val_start = -1;
-		//	}
-		//	else if (ch == ',') {
-		//		wait_val = true;
-		//	}
-		//	else if (ch == '{') {
-		//		val_start = index;
-		//		index += unserialize(key, begin + index, 0);
-		//		//index += for_blob(begin + index);
-		//		wait_val = false;
-		//		val_start = -1;
-		//	}
-		//	else if (wait_val && val_start == -1 && (ch != ' ' && ch != '\t')) {
-		//		val_start = index;
-		//	}
-		//	else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == ']' || ch == '}')) {
-		//		//cout << string(begin + val_start, index - val_start - 1) << " ";
-		//		unserialize(key, begin + val_start, index - val_start - 1);
-		//		val_start = -1;
-		//	}
-		//	index++;
-		//}
-		//return index;
 	}
 
-public:
-	int for_blob(const char* begin) {
-		//cout << "len: " << strlen(begin) << endl;
+	int parse_blob(const char* begin) {
 		int index = 0;
 		int start = -1;
 		while (char ch = *(begin + index)) {
-			if (ch == '{') {
+			if (ch == json_key_symbol::object_begin) {
 				if (start != -1) {
-					index += for_blob(begin + index);
+					index += parse_blob(begin + index);
 				}
 				else
 					start = index;
 			}
-			else if (ch == '}') {
+			else if (ch == json_key_symbol::object_end) {
 				if (start == -1) {
 					cout << begin << ":error" << endl;
 					return index;
 				}
 				return index;
 			}
-			else if (ch == '"') {
+			else if (ch == json_key_symbol::str) {
 				if (start == -1) {
 					cout << begin << ":error" << endl;;
 					return index;
 				}
 				index += parse_key_value(begin + index);
 			}
-			else if (ch != ' ') {
+			else if ( !is_ctr_or_space_char(ch)) {
 				if (start == -1) {
 					cout << begin << ":error" << endl;;
 					return index;
@@ -256,110 +213,16 @@ public:
 		return index;
 	}
 
-	int blob(const char* begin) {
-		const char* next = begin;
-		int key_begin = -1;
-		int key_end = 0;
-		int val_begin = 0;
-		int val_end = 0;
-		int index = 0;
-		bool is_blob = false;
-		bool is_str = false;
-		bool is_array = false;
-		while (*next) {
-			char ch = *next;
-			if (ch == '{') {
-				if (is_str == 0) {
-					if (val_begin != 0) {
-						is_blob = true;
-						string key(begin + key_begin + 1, key_end - key_begin - 1);
-						int i = unserialize(key, begin + val_begin + 1, val_end - val_begin - 1) + 1;
-						next += i;
-						index += i;
-					}
-					else {
-						is_blob = true;
-						int i = blob(next + 1) + 1;
-						next += i;
-						index += i;
-					}
-				}
-			}
-			else if (ch == '[') {
-				is_array = true;
-				val_begin = index;
-			}
-			else if (ch == '"') {
-				is_blob = false;
-				if (0 == val_begin) {
-					if (key_begin != -1) {
-						key_end = index;
-					}
-					else
-						key_begin = index;
-				}
-				if (is_str)
-					is_str = false;
-				else
-					is_str = true;
-			}
-			else if (ch == ':') {
-				if (is_str == 0) {
-					val_begin = index;
-				}
-			}
-			else if (ch == ',') {
-				if (is_str == 0) {
-					val_end = index;
-					if (!is_blob || is_array) {
-						string key(begin + key_begin + 1, key_end - key_begin - 1);
-						unserialize(key, begin + val_begin + 1, val_end - val_begin - 1);
-					}
-					if (is_array)
-						val_begin = index;
-					else {
-						val_begin = 0;
-						key_begin = -1;
-					}
-				}
-			}
-			else if (ch == ']') {
-				if (is_str == 0) {
-					val_end = index;
-					if (!is_blob) {
-						string key(begin + key_begin + 1, key_end - key_begin - 1);
-						unserialize(key, begin + val_begin + 1, val_end - val_begin - 1);
-					}
-					is_array = false;
-
-					val_begin = 0;
-					key_begin = -1;
-				}
-			}
-			else if (ch == '}') {
-				if (is_str == 0) {
-					if (key_begin != -1) {
-						val_end = index;
-						if (!is_blob) {
-							string key(begin + key_begin + 1, key_end - key_begin - 1);
-							unserialize(key, begin + val_begin + 1, val_end - val_begin - 1);
-						}
-						val_begin = 0;
-						key_begin = -1;
-					}
-				}
-				return index;
-			}
-			next++;
-			index++;
-		}
-	}
 	size_t unserialize(string &key, const char* val, size_t len) {
 		auto iter = fields_.find(key);
 		if (iter != fields_.end()) {
 			return (((T*)this)->*(iter->second->unserialize))(val, len);
 		}
 		return 0;
+	}
+public:
+	size_t unserialize(const char* begin) {
+		return parse_blob(begin);
 	}
 	void serialize(string &res) {
 		res += "{";
@@ -415,7 +278,7 @@ private:
 			return false;
 	}
 public:
-	static size_t us(bool *data, const char* begin, size_t len) {
+	static size_t unserialize(bool *data, const char* begin, size_t len) {
 		string val(begin, len);
 		if (val == "true")
 			*data = true;
@@ -425,39 +288,36 @@ public:
 			*data = stoi(val);
 		return 0;
 	}
-	static size_t us(int *data, const char* begin, size_t len) {
+	static size_t unserialize(int *data, const char* begin, size_t len) {
 		if (check_can_convert_num(begin, len)) {
 			string val(begin, len);
 			*data = stoi(val);
 		}
 		return 0;
 	}
-	static size_t us(double *data, const char* begin, size_t len) {
+	static size_t unserialize(double *data, const char* begin, size_t len) {
 		string val(begin, len);
 		*data = stod(val);
 		return 0;
 	}
-	static size_t us(string *data, const char* begin, size_t len) {
+	static size_t unserialize(string *data, const char* begin, size_t len) {
 		data->assign(begin + 1, len - 2);
 		return 0;
 	}
-	static size_t us(float *data, const char* begin, size_t len) {
+	static size_t unserialize(float *data, const char* begin, size_t len) {
 		string val(begin, len);
 		*data = stof(val);
 		return 0;
 	}
 	template<class T>
-	static size_t us(vector<T> *data, const char* begin, size_t len) {
+	static size_t unserialize(vector<T> *data, const char* begin, size_t len) {
 		data->resize(data->size() + 1);
-
-		//T v;
-		size_t in = us(&(*data)[data->size() - 1], begin, len);
-		//data->emplace_back(v);
+		size_t in = unserialize(&(*data)[data->size() - 1], begin, len);
 		return in;
 	}
 	template<class T>
-	static size_t us(json_base_t<T> *data, const char* begin, size_t len) {
-		return data->for_blob(begin);
+	static size_t unserialize(json_base_t<T> *data, const char* begin, size_t len) {
+		return data->unserialize(begin);
 	}
 
 	static void serialize(bool *data, string &res) {
@@ -466,7 +326,6 @@ public:
 		}
 		else
 			res += "false";
-		//res += to_string(*data);
 	}
 
 	static void serialize(int *data, string &res) {
@@ -502,7 +361,7 @@ public:
 name;\
 private:\
 	size_t unserialize_##name( const char* begin,size_t len) {\
-		return field_op::us(&name,begin,len);\
+		return field_op::unserialize(&name,begin,len);\
 	}\
 	void serialize_##name(string &res) {\
 		field_op::serialize(&name,res);\

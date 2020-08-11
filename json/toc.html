@@ -96,6 +96,8 @@ function pares(c_node, json, blob,is_parent_array) {
                     //c_node.value += "\n";
                     add_tab(c_node, blob);
                     c_node.value += "Json(" + p + "_t){\n";
+					add_tab(c_node, blob);
+					c_node.value+= "public:\n";
                     pares(c_node, json[p][0], blob);
                     add_tab(c_node, blob);
                     c_node.value += "};\n";
@@ -128,6 +130,8 @@ function pares(c_node, json, blob,is_parent_array) {
         else if (typeof json[p] == 'object') {
             add_tab(c_node, blob);
             c_node.value += "Json(" + p + "_t){\n";
+			add_tab(c_node, blob);
+			c_node.value+= "public:\n";
             pares(c_node, json[p], blob);
             add_tab(c_node, blob);
             c_node.value += "};\n";
