@@ -145,43 +145,57 @@ int parase(const char* begin) {
 	return index;
 }
 
+//int for_value(const char* begin) {
+//	//cout << "len: " << strlen(begin) << endl;
+//	int index = 0;
+//	bool start = false;
+//	while (char ch = *(begin + index)) {
+//		if (ch != ' ') {
+//			start = true;
+//		}
+//
+//		index++;
+//	}
+//	cout << begin << "str:error" << endl;
+//	return index;
+//}
+
 
 int for_array(const char* begin) {
 	int index = 0;
-	bool start = false;
 
 	int val_start = -1;
 
-	bool wait_val = true;
 	while (char ch = *(begin + index)) {
 		if (ch == ']') {
+			if (val_start != -1)
+				cout << string(begin + val_start, index - val_start) << " ";
 			return index;
 		}
-		else if (ch == '[') {}
+		else if (ch == '[') {
+			index += for_array(begin + index + 1);
+			val_start = -1;
+		}
 		else if (ch == '"') {
 			val_start = index;
 			int len = for_str(begin + index);
 			cout << string(begin + val_start, len + 1) <<" ";
 			index += len;
-			wait_val = false;
 			val_start = -1;
 		}
-		else if (ch == ',') {
-			wait_val = true;
+		else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == ']' || ch == '}')) {
+			cout << string(begin + val_start, index - val_start) << " ";
+			val_start = -1;
 		}
 		else if (ch == '{') {
 			val_start = index;
 			index += for_blob(begin + index);
-			wait_val = false;
 			val_start = -1;
 		}
-		else if (wait_val && val_start == -1 && (ch != ' ' && ch != '\t')) {
+		else if (val_start == -1 && (ch != ' ' && ch != '\t' && ch != ',' && ch != '}')) {
 			val_start = index;
 		}
-		else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == ']' || ch == '}')) {
-			cout << string(begin + val_start, index - val_start - 1) << " ";
-			val_start = -1;
-		}
+
 		index++;
 	}
 	return index;
@@ -342,7 +356,7 @@ void united_test() {
 	//const char* str = "\"a\":\"sfsdf\"";
 	cout << "----------------for key_value-----------------" << endl;
 	cout << for_key_value("\"a\":\"sfsdf\"") << endl;
-	cout << for_key_value("\"a\":12321") << endl;
+	cout << for_key_value("\"a\":-12321") << endl;
 	cout << for_key_value(" \"a{}[]  \":  12321") << endl;
 
 	cout << "----------------for blob-----------------" << endl;
@@ -355,13 +369,24 @@ void united_test() {
 	cout << " " << for_blob("{\"employee\":{ \"name\":\"Bill Gates\", \"age\" : 62, \"city\" : \"Seattle\" },\"job\":[\"seal\",\"sdf\"]}") << endl;
 
 	cout << "----------------for array-----------------" << endl;
-	cout << " " << for_array("[123,123,123]");
-	cout << " " << for_array("[\"aa\",\"bb\",\"cc\"]");
-	cout << " " << for_array("[{\"a\":\"sfsdf\"},{\"a\":\"sfsfdsfdf\"]");
-	cout << " " << for_array(R([{ "name":"Porsche", "models" : ["911", "Taycan"] },
-		{ "name":"BMW", "models" : ["M5", "M3", "X5"] },
-		{ "name":"Volvo", "models" : ["XC60", "V60"] }])) << endl;
-
+	cout << " " << for_array("[123,123,123]") <<endl;
+	cout << " " << for_array("[1 , 2, 3 ]") << endl;
+	cout << " " << for_array(" [1 , 2, 3 ] ") << endl;
+	cout << " " << for_array("[ \"a\" , \"b\",\"c\" ]") << endl;
+	cout << " " << for_array("[[1,2],[3,4] , [ 5 , 6 ]]") << endl;
+	cout << " " << for_array("[[[1,2]],[[3,4]] , [[ 5 , 6] ]]") << endl;
+	cout << " " << for_array("[{\"a\":[1,2]},{\"b\":[5,6]}]") << endl;
+	cout << " " << for_blob(R({
+		"profile": {
+		"firstName": [[1]],
+			"lastName" : "John",
+			"age" : 30})) << endl;
+	//cout << " " << for_array("[\"aa\",\"bb\",\"cc\"]");
+	//cout << " " << for_array("[{\"a\":\"sfsdf\"},{\"a\":\"sfsfdsfdf\"]");
+	//cout << " " << for_array(R([{ "name":"Porsche", "models" : ["911", "Taycan"] },
+	//	{ "name":"BMW", "models" : ["M5", "M3", "X5"] },
+	//	{ "name":"Volvo", "models" : ["XC60", "V60"] }])) << endl;
+	//cout << " " << for_array("[[1,2]]");
 
 	for_blob(R(
 		{
@@ -423,13 +448,256 @@ public:
 	vector<OO1> N(employees);
 };
 
+Json(Test4)
+{
+public:
+	Json(profile_t) {
+		string N(lastName);
+		vector<vector<int>> N(firstName);
+		double N(age);
+		string N(gender);
+		Json(contact_t) {
+			string N(type);
+			string N(number);
+		};
+		vector<contact_t> N(contact);
+		Json(address_t) {
+			string N(postal_code);
+			string N(state);
+			string N(street);
+			string N(city);
+		};
+		address_t N(address);
+		bool N(marital_status);
+	};
+	profile_t N(profile);
+};
+
+void utf_8() {
+	ifstream myfile("utf_8.txt");
+	string jj;
+	string temp;
+	if (!myfile.is_open())
+	{
+		cout << "未成功打开文件" << endl;
+	}
+	while (getline(myfile, temp))
+	{
+		jj += temp;
+	}
+	myfile.close();
+
+	Test4 ffff;
+	ffff.for_blob(jj.data());
+	getchar();
+}
+
+class sffsd :public nlohmann::json {
+};
+
+class kk :public nlohmann::json_sax<sffsd> {
+public:
+	bool null() { return false; };
+
+	/*!
+	@brief a boolean value was read
+	@param[in] val  boolean value
+	@return whether parsing should proceed
+	*/
+	bool boolean(bool val) { return false; };
+
+	/*!
+	@brief an integer number was read
+	@param[in] val  integer value
+	@return whether parsing should proceed
+	*/
+	bool number_integer(number_integer_t val) { return false; };
+
+	/*!
+	@brief an unsigned integer number was read
+	@param[in] val  unsigned integer value
+	@return whether parsing should proceed
+	*/
+	bool number_unsigned(number_unsigned_t val) { return false; };
+
+	/*!
+	@brief an floating-point number was read
+	@param[in] val  floating-point value
+	@param[in] s    raw token value
+	@return whether parsing should proceed
+	*/
+	bool number_float(number_float_t val, const string_t& s) { return false; };
+
+	/*!
+	@brief a string was read
+	@param[in] val  string value
+	@return whether parsing should proceed
+	@note It is safe to move the passed string.
+	*/
+	bool string(string_t& val) { return false; };
+
+	/*!
+	@brief a binary string was read
+	@param[in] val  binary value
+	@return whether parsing should proceed
+	@note It is safe to move the passed binary.
+	*/
+	virtual bool binary(binary_t& val){ return false; };
+
+	/*!
+	@brief the beginning of an object was read
+	@param[in] elements  number of object elements or -1 if unknown
+	@return whether parsing should proceed
+	@note binary formats may report the number of elements
+	*/
+	bool start_object(std::size_t elements) { return false; };
+
+	/*!
+	@brief an object key was read
+	@param[in] val  object key
+	@return whether parsing should proceed
+	@note It is safe to move the passed string.
+	*/
+	bool key(string_t& val) { return false; };
+
+	/*!
+	@brief the end of an object was read
+	@return whether parsing should proceed
+	*/
+	bool end_object() { return false; };
+
+	/*!
+	@brief the beginning of an array was read
+	@param[in] elements  number of array elements or -1 if unknown
+	@return whether parsing should proceed
+	@note binary formats may report the number of elements
+	*/
+	bool start_array(std::size_t elements) { return false; };
+
+	/*!
+	@brief the end of an array was read
+	@return whether parsing should proceed
+	*/
+	bool end_array() { return false; };
+
+	bool parse_error(std::size_t position,
+		const std::string& last_token,
+		const nlohmann::detail::exception& ex) {
+		return false;
+	}
+
+	~kk() {};
+};
+
 int main()
 {
+	std::vector<std::uint8_t> input = { 0xA1, 0x63, 0x66, 0x6F, 0x6F, 0x41, 0x00 };
+
+	// callback to set binary_seen to true if a binary value was seen
+	bool binary_seen = false;
+	auto callback = [&binary_seen](int /*depth*/, nlohmann::json::parse_event_t /*event*/, nlohmann::json & parsed)
+	{
+		return true;
+	};
+
+	nlohmann::json j;
+	auto cbp = nlohmann::detail::json_sax_dom_callback_parser<nlohmann::json>(j, callback, true);
+
+	perf_test("table build 1", 10000, [&cbp]()->void {
+		nlohmann::json::sax_parse(R({
+			"profile": {
+			"firstName": [[1]],
+				"lastName" : "John",
+				"age" : -30.3,
+				"gender" : "Male",
+				"address" : {
+				"street": "20th 2nd Street",
+					"city" : "New York",
+					"state" : "NY",
+					"postal_code" : "10003"
+			},
+				"contact": [
+				{
+					"type": "Home",
+						"number" : "(735) 754-0100"
+				},
+			  {
+				  "type": "Office",
+				  "number" : "(725) 854-0750"
+			  }
+				],
+					"marital_status": true
+		}
+			}), &cbp, nlohmann::json::input_format_t::json);
+	});
+
+
+	double aff = 23.003;
+	//united_test();
+	//utf_8();
+
 	string res;
-	HeWeather6 ffff;
-	ffff.serialize(res);
-	cout << res << endl;
-	for_blob(res.data());
+
+	perf_test("table build 1", 10000, []()->void {
+		Test4 ffff;
+		ffff.for_blob(R({
+			"profile": {
+			"firstName": [[1]],
+				"lastName" : "John",
+				"age" : -30.3,
+				"gender" : "Male",
+				"address" : {
+				"street": "20th 2nd Street",
+					"city" : "New York",
+					"state" : "NY",
+					"postal_code" : "10003"
+			},
+				"contact": [
+				{
+					"type": "Home",
+						"number" : "(735) 754-0100"
+				},
+		  {
+			  "type": "Office",
+			  "number" : "(725) 854-0750"
+		  }
+				],
+					"marital_status": true
+		}
+			}));
+	});
+
+	perf_test("table build 1", 10000, []()->void {
+		nlohmann::json patch = R"({
+		"profile": {
+		"firstName": [[]],
+			"lastName" : "John",
+			"age" : 30,
+			"gender" : "Male",
+			"address" : {
+			"street": "20th 2nd Street",
+				"city" : "New York",
+				"state" : "NY",
+				"postal_code" : "10003"
+		},
+			"contact": [
+			{
+				"type": "Home",
+					"number" : "(735) 754-0100"
+			},
+	  {
+		  "type": "Office",
+		  "number" : "(725) 854-0750"
+	  }
+			],
+				"marital_status": true
+	}
+		}
+	)"_json;
+
+	});
+	//cout << res << endl;
+	//for_blob(res.data());
 	ifstream myfile("hello.txt");
 	string jj;
 	string temp;

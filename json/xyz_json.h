@@ -124,7 +124,7 @@ private:
 		}
 		if (val_start != -1 && val_end == -1) {
 			val_end = index - 1;
-			cout << "k:" << string(begin + key_start, key_end - key_start + 1) << "  v:" << string(begin + val_start, val_end - val_start + 1) << endl;
+			//cout << "k:" << string(begin + key_start, key_end - key_start + 1) << "  v:" << string(begin + val_start, val_end - val_start + 1) << endl;
 		}
 		else
 			cout << begin << ":error" << endl;
@@ -133,47 +133,89 @@ private:
 
 	int parse_array(string &key, const char* begin) {
 		int index = 0;
-		bool start = false;
 
 		int val_start = -1;
 
-		bool wait_val = true;
 		while (char ch = *(begin + index)) {
 			if (ch == ']') {
+				if (val_start != -1) {
+					unserialize(key, begin + val_start, index - val_start);
+					//cout << string(begin + val_start, index - val_start) << " ";
+				}
 				return index;
 			}
-			else if (ch == '[') {}
-			else if (ch == '"') {
-				val_start = index;
-				int len = parse_str(begin + index);
-				//cout << string(begin + val_start, len + 1) << " ";
-
-				unserialize(key, begin + val_start, len + 1);
-				index += len;
-				wait_val = false;
+			else if (ch == '[') {
+				index += parse_array(key, begin + index + 1);
 				val_start = -1;
 			}
-			else if (ch == ',') {
-				wait_val = true;
+			else if (ch == '"') {
+				val_start = index;
+				int len = for_str(begin + index);
+				unserialize(key, begin + val_start, len + 1);
+				//cout << string(begin + val_start, len + 1) << " ";
+				index += len;
+				val_start = -1;
+			}
+			else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == ']' || ch == '}')) {
+				unserialize(key, begin + val_start, index - val_start);
+				//cout << string(begin + val_start, index - val_start) << " ";
+				val_start = -1;
 			}
 			else if (ch == '{') {
 				val_start = index;
 				index += unserialize(key, begin + index, 0);
 				//index += for_blob(begin + index);
-				wait_val = false;
 				val_start = -1;
 			}
-			else if (wait_val && val_start == -1 && (ch != ' ' && ch != '\t')) {
+			else if (val_start == -1 && (ch != ' ' && ch != '\t' && ch != ',' && ch != '}')) {
 				val_start = index;
 			}
-			else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == ']' || ch == '}')) {
-				//cout << string(begin + val_start, index - val_start - 1) << " ";
-				unserialize(key, begin + val_start, index - val_start - 1);
-				val_start = -1;
-			}
+
 			index++;
 		}
 		return index;
+		//int index = 0;
+		//bool start = false;
+
+		//int val_start = -1;
+
+		//bool wait_val = true;
+		//while (char ch = *(begin + index)) {
+		//	if (ch == ']') {
+		//		return index;
+		//	}
+		//	else if (ch == '[') {}
+		//	else if (ch == '"') {
+		//		val_start = index;
+		//		int len = parse_str(begin + index);
+		//		//cout << string(begin + val_start, len + 1) << " ";
+
+		//		unserialize(key, begin + val_start, len + 1);
+		//		index += len;
+		//		wait_val = false;
+		//		val_start = -1;
+		//	}
+		//	else if (ch == ',') {
+		//		wait_val = true;
+		//	}
+		//	else if (ch == '{') {
+		//		val_start = index;
+		//		index += unserialize(key, begin + index, 0);
+		//		//index += for_blob(begin + index);
+		//		wait_val = false;
+		//		val_start = -1;
+		//	}
+		//	else if (wait_val && val_start == -1 && (ch != ' ' && ch != '\t')) {
+		//		val_start = index;
+		//	}
+		//	else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == ']' || ch == '}')) {
+		//		//cout << string(begin + val_start, index - val_start - 1) << " ";
+		//		unserialize(key, begin + val_start, index - val_start - 1);
+		//		val_start = -1;
+		//	}
+		//	index++;
+		//}
+		//return index;
 	}
 
 public:
@@ -365,7 +407,9 @@ private:
 			return -1;
 	}
 	static bool check_can_convert_num(const char* begin, size_t len) {
-		if (len > 0 && begin[0] >= '0' && begin[0] >= '9')
+		if (len > 0 && begin[0] >= '0' && begin[0] <= '9')
+			return true;
+		else if (len > 1 && begin[0] == '-' && begin[1] >= '0' && begin[1] <= '9')
 			return true;
 		else
 			return false;
@@ -417,7 +461,12 @@ public:
 	}
 
 	static void serialize(bool *data, string &res) {
-		res += to_string(*data);
+		if (*data) {
+			res += "true";
+		}
+		else
+			res += "false";
+		//res += to_string(*data);
 	}
 
 	static void serialize(int *data, string &res) {
