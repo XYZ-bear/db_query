@@ -15,7 +15,7 @@ int for_key_value(const char* begin);
 int for_array(const char* begin);
 
 int for_str(const char* begin) {
-	//cout << "len: " << strlen(begin) << endl;
+	////cout << "len: " << strlen(begin) << endl;
 	int index = 0;
 	bool start = false;
 	while (char ch = *(begin + index)) {
@@ -26,13 +26,13 @@ int for_str(const char* begin) {
 		}
 		index++;
 	}
-	cout << begin << "str:error" << endl;
+	//cout << begin << "str:error" << endl;
 	return index;
 }
 
 //{fsff{ sfsdf{} }}";
 int for_blob(const char* begin) {
-	//cout << "len: " << strlen(begin) << endl;
+	////cout << "len: " << strlen(begin) << endl;
 	int index = 0;
 	int start = -1;
 	while (char ch = *(begin + index)) {
@@ -45,21 +45,21 @@ int for_blob(const char* begin) {
 		}
 		else if (ch == '}') {
 			if (start == -1) {
-				cout << begin << ":error" << endl;
+				//cout << begin << ":error" << endl;
 				return index;
 			}
 			return index;
 		}
 		else if (ch == '"') {
 			if (start == -1) {
-				cout << begin << ":error" << endl;;
+				//cout << begin << ":error" << endl;;
 				return index;
 			}
 			index += for_key_value(begin + index);
 		}
 		else if(ch != ' '){
 			if (start == -1) {
-				cout << begin << ":error" << endl;;
+				//cout << begin << ":error" << endl;;
 				return index;
 			}
 		}
@@ -69,7 +69,7 @@ int for_blob(const char* begin) {
 }
 
 int for_key_value(const char* begin) {
-	//cout <<"len"<< strlen(begin) << endl;
+	////cout <<"len"<< strlen(begin) << endl;
 	int index = 0;
 	int key_start = -1;
 	int key_end = -1;
@@ -90,18 +90,18 @@ int for_key_value(const char* begin) {
 					val_start = index;
 					index += for_str(begin + index);
 					val_end = index;
-					cout << string(begin + key_start, key_end - key_start + 1) <<"  "<< string(begin + val_start, val_end - val_start + 1)<< endl;
-					//cout << string(begin + val_start, val_end - val_start + 1) << endl;
+					//cout << string(begin + key_start, key_end - key_start + 1) <<"  "<< string(begin + val_start, val_end - val_start + 1)<< endl;
+					////cout << string(begin + val_start, val_end - val_start + 1) << endl;
 					return index;
 				}
 			}
 		}
 		else if (wait_val && ch == '['){
-			cout << string(begin + key_start, key_end - key_start + 1) << "   ";
+			//cout << string(begin + key_start, key_end - key_start + 1) << "   ";
 			return index + for_array(begin + index);
 		}
 		else if (wait_val && ch == '{') {
-			cout << string(begin + key_start, key_end - key_start + 1) << "   ";
+			//cout << string(begin + key_start, key_end - key_start + 1) << "   ";
 			return index + for_blob(begin + index);
 		}
 		else if (ch == ':') {
@@ -112,17 +112,17 @@ int for_key_value(const char* begin) {
 		}
 		else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == '}')) {
 			val_end = index;
-			cout << string(begin + key_start, key_end - key_start + 1) << "  " << string(begin + val_start, val_end - val_start) << endl;
+			//cout << string(begin + key_start, key_end - key_start + 1) << "  " << string(begin + val_start, val_end - val_start) << endl;
 			return index - 1;
 		}
 		index++;
 	}
 	if (val_start != -1 && val_end == -1) {
 		val_end = index - 1;
-		cout << "k:" << string(begin + key_start, key_end - key_start + 1) << "  v:" << string(begin + val_start, val_end - val_start + 1) << endl;
+		//cout << "k:" << string(begin + key_start, key_end - key_start + 1) << "  v:" << string(begin + val_start, val_end - val_start + 1) << endl;
 	}
 	else
-		cout << begin << ":error" << endl;
+		//cout << begin << ":error" << endl;
 	return index - 1;
 }
 
@@ -146,7 +146,7 @@ int parase(const char* begin) {
 }
 
 //int for_value(const char* begin) {
-//	//cout << "len: " << strlen(begin) << endl;
+//	////cout << "len: " << strlen(begin) << endl;
 //	int index = 0;
 //	bool start = false;
 //	while (char ch = *(begin + index)) {
@@ -156,7 +156,7 @@ int parase(const char* begin) {
 //
 //		index++;
 //	}
-//	cout << begin << "str:error" << endl;
+//	//cout << begin << "str:error" << endl;
 //	return index;
 //}
 
@@ -169,7 +169,7 @@ int for_array(const char* begin) {
 	while (char ch = *(begin + index)) {
 		if (ch == ']') {
 			if (val_start != -1)
-				cout << string(begin + val_start, index - val_start) << " ";
+				//cout << string(begin + val_start, index - val_start) << " ";
 			return index;
 		}
 		else if (ch == '[') {
@@ -179,12 +179,12 @@ int for_array(const char* begin) {
 		else if (ch == '"') {
 			val_start = index;
 			int len = for_str(begin + index);
-			cout << string(begin + val_start, len + 1) <<" ";
+			//cout << string(begin + val_start, len + 1) <<" ";
 			index += len;
 			val_start = -1;
 		}
 		else if (val_start != -1 && (ch == ' ' || ch == ',' || ch == ']' || ch == '}')) {
-			cout << string(begin + val_start, index - val_start) << " ";
+			//cout << string(begin + val_start, index - val_start) << " ";
 			val_start = -1;
 		}
 		else if (ch == '{') {
@@ -493,6 +493,114 @@ void utf_8() {
 	getchar();
 }
 
+
+class kkfs:public nlohmann::json_sax<nlohmann::json>
+{
+public:
+	/*!
+	@brief a null value was read
+	@return whether parsing should proceed
+	*/
+	bool null() { return true; }
+
+	/*!
+	@brief a boolean value was read
+	@param[in] val  boolean value
+	@return whether parsing should proceed
+	*/
+	bool boolean(bool val) { return true; }
+
+	/*!
+	@brief an integer number was read
+	@param[in] val  integer value
+	@return whether parsing should proceed
+	*/
+	virtual bool number_integer(number_integer_t val) { return true; }
+
+	/*!
+	@brief an unsigned integer number was read
+	@param[in] val  unsigned integer value
+	@return whether parsing should proceed
+	*/
+	virtual bool number_unsigned(number_unsigned_t val) { return true; }
+
+	/*!
+	@brief an floating-point number was read
+	@param[in] val  floating-point value
+	@param[in] s    raw token value
+	@return whether parsing should proceed
+	*/
+	virtual bool number_float(number_float_t val, const string_t& s) { return true; }
+
+	/*!
+	@brief a string was read
+	@param[in] val  string value
+	@return whether parsing should proceed
+	@note It is safe to move the passed string.
+	*/
+	virtual bool string(string_t& val) { return true; }
+
+	/*!
+	@brief a binary string was read
+	@param[in] val  binary value
+	@return whether parsing should proceed
+	@note It is safe to move the passed binary.
+	*/
+	virtual bool binary(binary_t& val) { return true; }
+
+	/*!
+	@brief the beginning of an object was read
+	@param[in] elements  number of object elements or -1 if unknown
+	@return whether parsing should proceed
+	@note binary formats may report the number of elements
+	*/
+	virtual bool start_object(std::size_t elements) { return true; }
+
+	/*!
+	@brief an object key was read
+	@param[in] val  object key
+	@return whether parsing should proceed
+	@note It is safe to move the passed string.
+	*/
+	virtual bool key(string_t& val) { 
+		return true; }
+
+	/*!
+	@brief the end of an object was read
+	@return whether parsing should proceed
+	*/
+	virtual bool end_object() { return true; }
+
+	/*!
+	@brief the beginning of an array was read
+	@param[in] elements  number of array elements or -1 if unknown
+	@return whether parsing should proceed
+	@note binary formats may report the number of elements
+	*/
+	virtual bool start_array(std::size_t elements) { return true; }
+
+	/*!
+	@brief the end of an array was read
+	@return whether parsing should proceed
+	*/
+	virtual bool end_array() { return true; }
+
+	/*!
+	@brief a parse error occurred
+	@param[in] position    the position in the input where the error occurs
+	@param[in] last_token  the last read token
+	@param[in] ex          an exception object describing the error
+	@return whether parsing should proceed (must return false)
+	*/
+	virtual bool parse_error(std::size_t position,
+		const std::string& last_token,
+		const nlohmann::detail::exception& ex) {
+		return true;
+	}
+
+	virtual ~kkfs() {};
+};
+
 int main()
 {
 	// callback to set binary_seen to true if a binary value was seen
@@ -503,35 +611,36 @@ int main()
 	};
 
 	nlohmann::json j;
-	auto cbp = nlohmann::detail::json_sax_dom_callback_parser<nlohmann::json>(j, callback, true);
+	//auto cbp = nlohmann::detail::json_sax_dom_callback_parser<nlohmann::json>(j, callback, true);
+	kkfs cbp;
 
-	perf_test("table build 1", 10000, [&cbp]()->void {
-		nlohmann::json::sax_parse(R({
-			"profile": {
-			"firstName": [[1]],
-				"lastName" : "John",
-				"age" : -30.3,
-				"gender" : "Male",
-				"address" : {
-				"street": "20th 2nd Street",
-					"city" : "New York",
-					"state" : "NY",
-					"postal_code" : "10003"
-			},
-				"contact": [
-				{
-					"type": "Home",
-						"number" : "(735) 754-0100"
-				},
-			  {
-				  "type": "Office",
-				  "number" : "(725) 854-0750"
-			  }
-				],
-					"marital_status": true
-		}
-			}), &cbp, nlohmann::json::input_format_t::json);
-	});
+	//perf_test("table build 1", 1000000, [&cbp]()->void {
+	//	nlohmann::json::sax_parse(R({
+	//		"profile": {
+	//		"firstName": [[1]],
+	//			"lastName" : "John",
+	//			"age" : -30.3,
+	//			"gender" : "Male",
+	//			"address" : {
+	//			"street": "20th 2nd Street",
+	//				"city" : "New York",
+	//				"state" : "NY",
+	//				"postal_code" : "10003"
+	//		},
+	//			"contact": [
+	//			{
+	//				"type": "Home",
+	//					"number" : "(735) 754-0100"
+	//			},
+	//		  {
+	//			  "type": "Office",
+	//			  "number" : "(725) 854-0750"
+	//		  }
+	//			],
+	//				"marital_status": true
+	//	}
+	//		}), &cbp, nlohmann::json::input_format_t::json);
+	//});
 
 
 	double aff = 23.003;
@@ -539,8 +648,8 @@ int main()
 	//utf_8();
 
 	string res;
-
-	perf_test("table build 1", 10000, [&res]()->void {
+	int a = 0;
+	perf_test("table build 1", 1000000, [&res,&a]()->void {
 		Test4 ffff;
 		ffff.unserialize(R({
 			"profile": {
@@ -567,10 +676,10 @@ int main()
 					"marital_status": true
 		}
 			}));
-		ffff.profile.lastName;
+		//a+=ffff.profile.lastName.size();
 	});
 
-	perf_test("table build 1", 10000, []()->void {
+	perf_test("table build 1", 10000, [&a]()->void {
 		nlohmann::json patch = R"({
 		"profile": {
 		"firstName": [[1]],
@@ -597,7 +706,7 @@ int main()
 	}
 		}
 	)"_json;
-		patch["profile"]["lastName"].get<string>();
+		a+=patch["profile"]["lastName"].get<string>().size();
 	});
 	//cout << res << endl;
 	//for_blob(res.data());

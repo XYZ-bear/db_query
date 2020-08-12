@@ -57,78 +57,89 @@ private:
 
 	// parse the string in quotes like "xxx",return the index of the last quote
 	// case: "xxx"
-	bool parse_str() {
+	int parse_str(const char* begin, const char* end = nullptr) {
+		int index = 0;
 		bool start = false;
-		while (char ch = *next) {
+		while (char ch = *(begin + index)) {
 			if (ch == json_key_symbol::str) {
 				if (start)
-					return true;
+					return index;
 				start = true;
 			}
-			next++;
+			index++;
 		}
-		return true;
+		cout << begin << "str:error" << endl;
+		return index;
 	}
 
 	// case 1:"xxx":xxx
 	// case 2:"xxx":"xxx"
 	// case 3:"xxx":{xxx}
 	// case 4:"xxx":[xxx]
-	bool parse_key_value() {
-		const char* key_start = nullptr;
-		const char* key_end = nullptr;
-		const char* val_start = nullptr;
+	int parse_key_value(const char* begin, const char* end = nullptr) {
+		int index = 0;
+		int key_start = -1;
+		int key_end = -1;
+		int val_start = -1;
+		int val_end = -1;
 
 		bool wait_val = false;
-		while (char ch = *next) {
+		while (char ch = *(begin + index)) {
 			if (ch == json_key_symbol::str) {
 				//ready to pares key
-				if (!key_start) {
-					key_start = next;
-					parse_str();
-					key_end = next;
+				if (key_start == -1) {
+					key_start = index;
+					index += parse_str(begin + index);
+					key_end = index;
 				}
 				else {
 					//case 2:"xxx" : "xxx"
 					if (wait_val) {
-						val_start = next;
-						parse_str();
+						val_start = index;
+						index += parse_str(begin + index);
+						val_end = index;
 
-						string key(key_start + 1, key_end);
-						unserialize(key, val_start, next - val_start);
-						return true;
+						string key(begin + key_start + 1, key_end - key_start - 1);
+						unserialize(key, begin + val_start, val_end - val_start + 1);
+						return index;
 					}
 				}
 			}
 			// case 4:"xxx":[xxx]
 			else if (wait_val && ch == json_key_symbol::array_begin) {
-				string key(key_start + 1, key_end);
-				next++;
-				return parse_array(key);
+				string key(begin + key_start + 1, key_end - key_start - 1);
+				return index + parse_array(key, begin + index);
 			}
 			// case 3:"xxx":{xxx}
 			else if (wait_val && ch == json_key_symbol::object_begin) {
-				string key(key_start + 1, key_end);
-				return unserialize(key, next, end - next);
+				string key(begin + key_start + 1, key_end - key_start - 1);
+				return index + unserialize(key, begin + index, 0);
 			}
 			// ready to pares value
 			else if (ch == json_key_symbol::key_value_separator) {
 				wait_val = true;
 			}
 			// get the first index of the value(escape white space and controll char)
-			else if (wait_val && !val_start && !is_ctr_or_space_char(ch)) {
-				val_start = next;
+			else if (wait_val && val_start == -1 && !is_ctr_or_space_char(ch)) {
+				val_start = index;
 			}
 			// case 1:"xxx" : xxx
-			else if (val_start && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::object_end)) {
-				string key(key_start + 1, key_end);
-				unserialize(key, val_start, next - val_start);
+			else if (val_start != -1 && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::object_end)) {
+				val_end = index;
 
-				return true;
+				string key(begin + key_start + 1, key_end - key_start - 1);
+				unserialize(key, begin + val_start, val_end - val_start);
+
+				return index - 1;
 			}
-			next++;
+			index++;
 		}
-		return false;
+		if (val_start != -1 && val_end == -1) {
+			val_end = index - 1;
+		}
+		else
+			cout << begin << ":error" << endl;
+		return index - 1;
 	}
 
 	// parse array with 4 cases
@@ -136,76 +147,83 @@ private:
 	// case 2:[xxx,...]
 	// case 3:[{xxx},...]
 	// case 4:[[xxx],...]
-	bool parse_array(string &key){
-		const char* val_start =nullptr;
+	int parse_array(string &key, const char* begin, const char* end = nullptr){
+		int index = 0;
 
-		while (char ch = *next) {
+		int val_start = -1;
+
+		while (char ch = *(begin + index)) {
 			if (ch == json_key_symbol::array_end) {
-				if (val_start) {
-					unserialize(key, val_start, next - val_start);
+				if (val_start != -1) {
+					unserialize(key, begin + val_start, index - val_start);
 				}
-				next++;
-				return true;
+				return index;
 			}
 			else if (ch == json_key_symbol::array_begin) {
-				next++;
-				parse_array(key);
-				val_start = nullptr;
+				index += parse_array(key, begin + index + 1);
+				val_start = -1;
 			}
 			else if (ch == json_key_symbol::str) {
-				val_start = next;
-				for_str(next);
-				unserialize(key, val_start, next - val_start);
-				val_start = nullptr;
+				val_start = index;
+				int len = for_str(begin + index);
+				unserialize(key, begin + val_start, len + 1);
+				index += len;
+				val_start = -1;
 			}
-			else if (val_start && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::array_end || ch == json_key_symbol::object_end)) {
-				unserialize(key, val_start, next - val_start);
-				val_start = nullptr;
+			else if (val_start != -1 && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::array_end || ch == json_key_symbol::object_end)) {
+				unserialize(key, begin + val_start, index - val_start);
+				val_start = -1;
 			}
 			else if (ch == json_key_symbol::object_begin) {
-				val_start = next;
-				unserialize(key, next, end - next);
-				val_start = nullptr;
+				val_start = index;
+				index += unserialize(key, begin + index, 0);
+				val_start = -1;
 			}
-			else if (!val_start && (!is_ctr_or_space_char(ch) && ch != json_key_symbol::next_key_value && ch != json_key_symbol::object_end)) {
-				val_start = next;
+			else if (val_start == -1 && (!is_ctr_or_space_char(ch) && ch != json_key_symbol::next_key_value && ch != json_key_symbol::object_end)) {
+				val_start = index;
 			}
 
-			next++;
+			index++;
 		}
-		return false;
+		return index;
 	}
 
 	// pares object:
 	// case 1:{"xxx":{xxx}}
-	int parse_blob() {
-		bool start = false;
-		while (char ch = *next) {
+	int parse_blob(const char* begin, const char* end = nullptr) {
+		int index = 0;
+		int start = -1;
+		while (char ch = *(begin + index)) {
 			if (ch == json_key_symbol::object_begin) {
-				if (start) {
-					parse_blob();
+				if (start != -1) {
+					index += parse_blob(begin + index);
 				}
 				else
-					start = true;
+					start = index;
 			}
 			else if (ch == json_key_symbol::object_end) {
-				if (!start) {
+				if (start == -1) {
 					cout << begin << ":error" << endl;
-					return false;
+					return index;
 				}
-				return true;
+				return index;
 			}
 			else if (ch == json_key_symbol::str) {
-				parse_key_value();
+				if (start == -1) {
+					cout << begin << ":error" << endl;;
+					return index;
+				}
+				index += parse_key_value(begin + index);
 			}
 			else if ( !is_ctr_or_space_char(ch)) {
-				if (!start) {
-					return false;
+				if (start == -1) {
+					cout << begin << ":error" << endl;;
+					return index;
 				}
 			}
-			next++;
+			index++;
 		}
-		return false;
+		return index;
 	}
 
 	size_t unserialize(string &key, const char* val, size_t len) {
@@ -216,17 +234,11 @@ private:
 		return 0;
 	}
 public:
-	size_t unserialize(const char* json) {
-		begin = json;
-		end = nullptr;
-		next = json;
-		return parse_blob();
+	size_t unserialize(const char* begin) {
+		return parse_blob(begin);
 	}
 	size_t unserialize(const char* json, size_t size) {
-		begin = json;
-		end = json + size;
-		next = json;
-		return parse_blob();
+		return parse_blob(begin, json + size);
 	}
 	void serialize(string &res) {
 		res += "{";
@@ -240,9 +252,6 @@ public:
 		res += "}";
 	}
 private:
-	const char* begin;
-	const char* end;
-	const char* next;
 	static std::unordered_map<string, const date_imple_t<T>*> fields_;
 protected:
 	static T instance_;
