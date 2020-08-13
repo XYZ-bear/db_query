@@ -416,9 +416,10 @@ void complex_test() {
 
 }
 
-Json(HeWeather6)
-{
+Json(HeWeather6){
+public:
 	Json(Basic) {
+	public:
 		std::string N(cid);// : "CN101010100",
 		std::string	N(location);// " : "北京",
 		std::string	N(parent_city);// : "北京",
@@ -642,18 +643,17 @@ int main()
 	//		}), &cbp, nlohmann::json::input_format_t::json);
 	//});
 
-
 	double aff = 23.003;
 	//united_test();
 	//utf_8();
 
 	string res;
 	int a = 0;
-	perf_test("table build 1", 1000000, [&res,&a]()->void {
+	perf_test("table build 1", 1000, [&res,&a]()->void {
 		Test4 ffff;
 		ffff.unserialize(R({
 			"profile": {
-			"firstName": [[1]],
+			"firstName": [[1,2]],
 				"lastName" : "&#x4F60;&#x597D;",
 				"age" : -30.3,
 				"gender" : "Male",
@@ -816,6 +816,10 @@ int main()
 				"tz" : "8.0"
 		}}));
     std::cout << "Hello World!\n"; 
+
+	HeWeather6 hw;
+	hw.basics;
+
 	getchar();
 }
 

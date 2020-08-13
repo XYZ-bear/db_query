@@ -24,6 +24,9 @@ public:
 	};
 };
 
+
+#define check_result(res)  if (!res) { return false; }
+
 template<class T>
 class json_base_t {
 	enum json_key_symbol
@@ -59,13 +62,13 @@ private:
 	// case: "xxx"
 	bool parse_str() {
 		bool start = false;
-		while (char ch = *next) {
+		while (ch) {
 			if (ch == json_key_symbol::str) {
 				if (start)
 					return true;
 				start = true;
 			}
-			next++;
+			get_next();
 		}
 		return true;
 	}
@@ -80,36 +83,37 @@ private:
 		const char* val_start = nullptr;
 
 		bool wait_val = false;
-		while (char ch = *next) {
+		while (ch) {
 			if (ch == json_key_symbol::str) {
 				//ready to pares key
 				if (!key_start) {
 					key_start = next;
-					parse_str();
+					check_result(parse_str());
 					key_end = next;
 				}
 				else {
 					//case 2:"xxx" : "xxx"
 					if (wait_val) {
 						val_start = next;
-						parse_str();
+						check_result(parse_str());
 
 						string key(key_start + 1, key_end);
-						unserialize(key, val_start, next - val_start);
+						unserialize(key, val_start, next - val_start + 1);
 						return true;
 					}
 				}
 			}
 			// case 4:"xxx":[xxx]
 			else if (wait_val && ch == json_key_symbol::array_begin) {
+				get_next();
 				string key(key_start + 1, key_end);
-				next++;
 				return parse_array(key);
 			}
 			// case 3:"xxx":{xxx}
 			else if (wait_val && ch == json_key_symbol::object_begin) {
 				string key(key_start + 1, key_end);
-				return unserialize(key, next, end - next);
+				get_next(unserialize(key, next, end - next));
+				return true;
 			}
 			// ready to pares value
 			else if (ch == json_key_symbol::key_value_separator) {
@@ -126,7 +130,7 @@ private:
 
 				return true;
 			}
-			next++;
+			get_next();
 		}
 		return false;
 	}
@@ -139,51 +143,54 @@ private:
 	bool parse_array(string &key){
 		const char* val_start =nullptr;
 
-		while (char ch = *next) {
+		while (ch) {
 			if (ch == json_key_symbol::array_end) {
-				if (val_start) {
+				if (val_start)
 					unserialize(key, val_start, next - val_start);
-				}
-				next++;
 				return true;
 			}
 			else if (ch == json_key_symbol::array_begin) {
-				next++;
-				parse_array(key);
+				get_next();
+				check_result(parse_array(key));
 				val_start = nullptr;
 			}
+			//pares string value
 			else if (ch == json_key_symbol::str) {
 				val_start = next;
-				for_str(next);
+				check_result(for_str(next));
 				unserialize(key, val_start, next - val_start);
 				val_start = nullptr;
 			}
+			//pares value
 			else if (val_start && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::array_end || ch == json_key_symbol::object_end)) {
 				unserialize(key, val_start, next - val_start);
 				val_start = nullptr;
 			}
 			else if (ch == json_key_symbol::object_begin) {
 				val_start = next;
-				unserialize(key, next, end - next);
+				get_next(unserialize(key, next, end - next));
 				val_start = nullptr;
 			}
 			else if (!val_start && (!is_ctr_or_space_char(ch) && ch != json_key_symbol::next_key_value && ch != json_key_symbol::object_end)) {
 				val_start = next;
 			}
-
-			next++;
+			get_next();
 		}
 		return false;
 	}
 
 	// pares object:
 	// case 1:{"xxx":{xxx}}
-	int parse_blob() {
+	// return |      |len|| 
+	// return |----len----|
+	bool parse_object() {
+		// '{' must appear befor '}',set this as flag
 		bool start = false;
-		while (char ch = *next) {
+		while (ch) {
+			// obj begin
 			if (ch == json_key_symbol::object_begin) {
 				if (start) {
-					parse_blob();
+					check_result(parse_object());
 				}
 				else
 					start = true;
@@ -196,16 +203,24 @@ private:
 				return true;
 			}
 			else if (ch == json_key_symbol::str) {
-				parse_key_value();
+				check_result(parse_key_value());
 			}
 			else if ( !is_ctr_or_space_char(ch)) {
 				if (!start) {
 					return false;
 				}
 			}
-			next++;
+			get_next();
 		}
 		return false;
+	}
+
+	void inline get_next(size_t step = 1) {
+		next += step;
+		if (end && end < next)
+			ch = '\0';
+		else
+			ch = *next;
 	}
 
 	size_t unserialize(string &key, const char* val, size_t len) {
@@ -220,13 +235,17 @@ public:
 		begin = json;
 		end = nullptr;
 		next = json;
-		return parse_blob();
+		ch = *begin;
+		check_result(parse_object());
+		return next - begin;
 	}
 	size_t unserialize(const char* json, size_t size) {
 		begin = json;
 		end = json + size;
 		next = json;
-		return parse_blob();
+		ch = *begin;
+		check_result(parse_object());
+		return next - begin;
 	}
 	void serialize(string &res) {
 		res += "{";
@@ -243,6 +262,7 @@ private:
 	const char* begin;
 	const char* end;
 	const char* next;
+	char ch;
 	static std::unordered_map<string, const date_imple_t<T>*> fields_;
 protected:
 	static T instance_;
