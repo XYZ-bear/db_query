@@ -649,13 +649,13 @@ int main()
 
 	string res;
 	int a = 0;
-	perf_test("table build 1", 1000, [&res,&a]()->void {
+	perf_test("table build 1", 10000, [&res,&a]()->void {
 		Test4 ffff;
 		ffff.unserialize(R({
 			"profile": {
-			"firstName": [[1,2]],
+			"firstName": [[1,2],[4,5]],
 				"lastName" : "&#x4F60;&#x597D;",
-				"age" : -30.3,
+				"age" : 300000.33,
 				"gender" : "Male",
 				"address" : {
 				"street": "20th 2nd Street",
@@ -676,13 +676,14 @@ int main()
 					"marital_status": true
 		}
 			}));
+		//ffff.serialize(res);
 		//a+=ffff.profile.lastName.size();
 	});
 
 	perf_test("table build 1", 10000, [&a]()->void {
 		nlohmann::json patch = R"({
 		"profile": {
-		"firstName": [[1]],
+		"firstName": [[1,2],[4,5]],
 			"lastName" : "&#x4F60;&#x597D;",
 			"age" : 30,
 			"gender" : "Male",
