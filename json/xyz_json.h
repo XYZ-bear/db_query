@@ -24,13 +24,9 @@ public:
 	};
 };
 
-
 #define check_result(res)  if (!res) { return false; }
 
-
 class field_op;
-
-
 
 template<class T>
 class json_base_t {
@@ -49,7 +45,7 @@ class json_base_t {
 	};
 public:
 	typedef T child_t;
-	void __add_field(const char* name, const date_imple_t<T>* field) {
+	void __add_field(const char* name, const data_imple_t<T>* field) {
 		if (fields_.find(name) == fields_.end()) {
 			fields_[name] = field;
 		}
@@ -99,8 +95,28 @@ protected:
 		else
 			res += "false";
 	}
-
-	inline static void serialize(int *data, string &res) {
+	inline static void serialize(int64_t *data, string &res) {
+		res += to_string(*data);
+	}
+	inline static void serialize(int32_t *data, string &res) {
+		res += to_string(*data);
+	}
+	inline static void serialize(int16_t *data, string &res) {
+		res += to_string(*data);
+	}
+	inline static void serialize(int8_t *data, string &res) {
+		res += to_string(*data);
+	}
+	inline static void serialize(uint64_t *data, string &res) {
+		res += to_string(*data);
+	}
+	inline static void serialize(uint32_t *data, string &res) {
+		res += to_string(*data);
+	}
+	inline static void serialize(uint16_t *data, string &res) {
+		res += to_string(*data);
+	}
+	inline static void serialize(uint8_t *data, string &res) {
 		res += to_string(*data);
 	}
 	inline static void serialize(double *data, string &res) {
@@ -138,10 +154,39 @@ protected:
 			*data = stoi(val);
 		return 0;
 	}
-	inline static size_t unserialize(int *data, const char* begin, size_t len) {
+	inline static size_t unserialize(int32_t *data, const char* begin, size_t len) {
 		*data = strtol(begin, nullptr, 10);
 		return 0;
 	}
+	inline static size_t unserialize(int8_t *data, const char* begin, size_t len) {
+		*data = strtol(begin, nullptr, 10);
+		return 0;
+	}
+	inline static size_t unserialize(int16_t *data, const char* begin, size_t len) {
+		*data = strtol(begin, nullptr, 10);
+		return 0;
+	}
+	inline static size_t unserialize(int64_t *data, const char* begin, size_t len) {
+		*data = strtoll(begin, nullptr, 10);
+		return 0;
+	}
+	inline static size_t unserialize(uint32_t *data, const char* begin, size_t len) {
+		*data = strtoul(begin, nullptr, 10);
+		return 0;
+	}
+	inline static size_t unserialize(uint8_t *data, const char* begin, size_t len) {
+		*data = strtoul(begin, nullptr, 10);
+		return 0;
+	}
+	inline static size_t unserialize(uint16_t *data, const char* begin, size_t len) {
+		*data = strtoul(begin, nullptr, 10);
+		return 0;
+	}
+	inline static size_t unserialize(uint64_t *data, const char* begin, size_t len) {
+		*data = strtoull(begin, nullptr, 10);
+		return 0;
+	}
+
 	inline static size_t unserialize(double *data, const char* begin, size_t len) {
 		*data = strtod(begin, nullptr);
 		return 0;
@@ -156,7 +201,7 @@ protected:
 	}
 	template<class V>
 	inline static size_t unserialize(json_base_t<V> *data, const char* begin, size_t len) {
-		return data->unserialize(begin);
+		return data->unserialize(begin, len);
 	}
 
 	// parse array with 4 cases
@@ -175,7 +220,6 @@ protected:
 					unserialize(&value, val_start, next - val_start);
 					(*data).emplace_back(value);
 				}
-				//unserialize(key, val_start, next - val_start);
 				return true;
 			}
 			else if (ch == json_key_symbol::array_begin) {
@@ -184,7 +228,7 @@ protected:
 				check_result(unserialize(&value, next, end - next));
 				(*data).emplace_back(value);
 				val_start = nullptr;
-			}
+			}  
 			//pares string value
 			else if (ch == json_key_symbol::str) {
 				val_start = next;
@@ -192,12 +236,10 @@ protected:
 				V value;
 				unserialize(&value, val_start, next - val_start);
 				(*data).emplace_back(value);
-				//unserialize(key, val_start, next - val_start);
 				val_start = nullptr;
 			}
 			//pares value
-			else if (val_start && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::array_end || ch == json_key_symbol::object_end)) {
-				//unserialize(key, val_start, next - val_start);
+			else if (val_start && (is_ctr_or_space_char(ch) || ch == json_key_symbol::next_key_value || ch == json_key_symbol::array_end )) {
 				V value;
 				unserialize(&value, val_start, next - val_start);
 				(*data).emplace_back(value);
@@ -208,7 +250,6 @@ protected:
 				V value;
 				get_next(unserialize(&value, next, end - next));
 				(*data).emplace_back(value);
-				//get_next(unserialize(key, next, end - next));
 				val_start = nullptr;
 			}
 			else if (!val_start && (!is_ctr_or_space_char(ch) && ch != json_key_symbol::next_key_value && ch != json_key_symbol::object_end)) {
@@ -225,7 +266,7 @@ protected:
 		bool start = false;
 		while (ch) {
 			if (ch == json_key_symbol::str) {
-				if (start)
+				if (get_pre()!='\\' && start)
 					return true;
 				start = true;
 			}
@@ -340,6 +381,10 @@ protected:
 			ch = *next;
 	}
 
+	char inline get_pre() {
+		return *(next - 1);
+	}
+
 	size_t unserialize(string &key, const char* val, size_t len) {
 		auto iter = fields_.find(key);
 		if (iter != fields_.end()) {
@@ -348,17 +393,12 @@ protected:
 		return 0;
 	}
 public:
-	size_t unserialize(const char* json) {
+	size_t unserialize(const char* json, size_t size = 0) {
 		begin = json;
-		end = nullptr;
-		next = json;
-		ch = *begin;
-		check_result(parse_object());
-		return next - begin;
-	}
-	size_t unserialize(const char* json, size_t size) {
-		begin = json;
-		end = json + size;
+		if (size > 0)
+			end = json + size;
+		else
+			end = nullptr;
 		next = json;
 		ch = *begin;
 		check_result(parse_object());
@@ -375,12 +415,12 @@ public:
 			res.pop_back();
 		res += "}";
 	}
-private:
+public:
 	const char* begin;
 	const char* end;
 	const char* next;
 	char ch;
-	static std::unordered_map<string, const date_imple_t<T>*> fields_;
+	static std::unordered_map<string, const data_imple_t<T>*> fields_;
 protected:
 	static T instance_;
 public:
@@ -403,7 +443,7 @@ private:\
 	void serialize_##name(string &res) {\
 		serialize(&name,res);\
 	}\
-	static constexpr date_imple_t<child_t> const_impl_##name = { &child_t::unserialize_##name,&child_t::serialize_##name };\
+	static constexpr data_imple_t<child_t> const_impl_##name = { &child_t::unserialize_##name,&child_t::serialize_##name };\
 	colloect collect__##name{this,#name,&const_impl_##name};\
 public:\
 
